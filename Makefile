@@ -41,6 +41,10 @@ drc: $(TARGET_GDS)
 	klayout -b -r $(PWD)/drc/sg13g2_mr.lydrc -rd 'in_gds=$<' -rd density=0
 .phony: drc
 
+drc_max: $(TARGET_GDS)
+	klayout -b -r $(PWD)/drc/sg13g2_maximal.lydrc -rd 'in_gds=$<' -rd density=0
+.phony: drc_max
+
 clean:
 	rm -f $(TARGET_GDS) $(SPICE)
 .phony: clean

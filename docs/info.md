@@ -9,14 +9,14 @@ You can also include images in this folder and reference them in the markdown. E
 
 ## How it works
 
-A simple yet stylish ring oscillator that uses a chain of 21 SkullFET inverters to generate a square wave output. Based on simulation, the oscillator should have a frequency of around 148.6 MHz.
+A simple yet stylish ring oscillator that uses a chain of 21 SkullFET inverters to generate a square wave output. Based on simulation, the oscillator should have a frequency of around 150.5 MHz.
 
 | Pin       | Expected frequency |
 |-----------|--------------------|
-| osc_out   | 148.6 MHz          |
-| osc_div_2 | 74.3 MHz           |
-| osc_div_4 | 37.1 MHz           |
-| osc_div_8 | 18.6 MHz           |
+| osc_out   | 150.5 MHz          |
+| osc_div_2 | 75.3 MHz           |
+| osc_div_4 | 37.6 MHz           |
+| osc_div_8 | 18.8 MHz           |
 
 ## How to test
 
