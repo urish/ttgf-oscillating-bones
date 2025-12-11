@@ -293,6 +293,7 @@ MACRO tt_um_oscillating_bones
     END
   END uio_oe[7]
   PIN VGND
+    USE GROUND ;
     ANTENNADIFFAREA 117.050171 ;
     PORT
       LAYER TopMetal1 ;
@@ -300,6 +301,7 @@ MACRO tt_um_oscillating_bones
     END
   END VGND
   PIN VDPWR
+    USE POWER ;
     ANTENNADIFFAREA 122.505745 ;
     PORT
       LAYER TopMetal1 ;
