@@ -1,60 +1,34 @@
 /*
- * Copyright (c) 2024 Uri Shaked
+ * Copyright (c) 2024-2026 Uri Shaked
  * SPDX-License-Identifier: Apache-2.0
  */
 
 `default_nettype none
 
+// Oscillating Bones - a ring oscillator built from skull-shaped SkullFET transistors.
+// This is an *analog* project: the real circuit lives in the hand-drawn custom GDS
+// (gds/tt_um_oscillating_bones.gds). This Verilog is only the black-box interface that
+// the Tiny Tapeout harness wires up.
 module tt_um_oscillating_bones (
+    input  wire       VGND,
+    input  wire       VDPWR,    // 3.3V core power supply (the ring runs on this)
     input  wire [7:0] ui_in,    // Dedicated inputs
-    output wire [7:0] uo_out,   // Dedicated outputs
+    output wire [7:0] uo_out,   // Dedicated outputs (osc_out, osc_div_2/4/8)
     input  wire [7:0] uio_in,   // IOs: Input path
     output wire [7:0] uio_out,  // IOs: Output path
     output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    input  wire       ena,      // always 1 when the design is powered, so you can ignore it
-    input  wire       clk,      // clock
-    input  wire       rst_n     // reset_n - low to reset
+    inout  wire [7:0] ua,       // Analog pins; ua[0] = osc_out_3v3 (raw 3.3V oscillation)
+    input  wire       ena,      // always 1 when the design is powered
+    input  wire       clk,      // clock (unused)
+    input  wire       rst_n     // reset_n - low to reset the frequency divider
 );
 
-  wire osc_out;
-  wire osc_div_2;
-  wire osc_div_4;
-  wire osc_div_8;
-
-  ring ring (.ROSC_OUT(osc_out));
-
-  freq_divider divider (
-      .IN(osc_out),
-      .ODIV2(osc_div_2),
-      .ODIV4(osc_div_4),
-      .ODIV8(osc_div_8)
-  );
-
-  assign uo_out[0] = osc_out;
-  assign uo_out[1] = osc_div_2;
-  assign uo_out[2] = osc_div_4;
-  assign uo_out[3] = osc_div_8;
-  assign uo_out[4] = 0;
-  assign uo_out[5] = 0;
-  assign uo_out[6] = 0;
-  assign uo_out[7] = 0;
-
-  assign uio_out[0] = 0;
-  assign uio_out[1] = 0;
-  assign uio_out[2] = 0;
-  assign uio_out[3] = 0;
-  assign uio_out[4] = 0;
-  assign uio_out[5] = 0;
-  assign uio_out[6] = 0;
-  assign uio_out[7] = 0;
-
-  assign uio_oe[0] = 0;
-  assign uio_oe[1] = 0;
-  assign uio_oe[2] = 0;
-  assign uio_oe[3] = 0;
-  assign uio_oe[4] = 0;
-  assign uio_oe[5] = 0;
-  assign uio_oe[6] = 0;
-  assign uio_oe[7] = 0;
+  // Outputs driven by the analog macro:
+  //   uo_out[0] = osc_out     (ring oscillator, level-shifted)
+  //   uo_out[1] = osc_div_2
+  //   uo_out[2] = osc_div_4
+  //   uo_out[3] = osc_div_8
+  //   ua[0]     = osc_out_3v3 (raw 3.3V oscillation)
 
 endmodule
+`default_nettype wire

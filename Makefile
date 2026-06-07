@@ -2,49 +2,44 @@
 # Author: Uri Shaked
 
 MACRO := tt_um_oscillating_bones
-TARGET_GDS := gds/$(MACRO).gds
 SOURCE_GDS := gds/$(MACRO).source.gds
+RING_GDS   := gds/ring_gf180.gds
+TARGET_GDS := gds/$(MACRO).gds
 TARGET_LEF := lef/$(MACRO).lef
-SPICE := spice/$(MACRO).spice
+SPICE      := spice/$(MACRO).spice
+DEF        := def/tt_analog_1x2.def
 
-PDK := ihp-sg13g2
+PDK := gf180mcuD
 MAGIC_RC := $(PDK_ROOT)/$(PDK)/libs.tech/magic/$(PDK).magicrc
+DRC_DECK := $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/drc/gf180mcu.drc
 
 all: $(TARGET_GDS) $(TARGET_LEF)
 .PHONY: all
 
-$(TARGET_GDS): $(SOURCE_GDS)
-	python scripts/make_final_gds.py $< $@
+# 1) Remap the IHP SkullFET ring artwork to gf180mcuD layers (3.3V devices, 1.45x scale).
+$(RING_GDS): $(SOURCE_GDS) scripts/remap_to_gf180.py
+	python3 scripts/remap_to_gf180.py $< $@ ring 1.45
 
-$(TARGET_LEF): $(TARGET_GDS)
-	echo "gds read $<; load $(MACRO); select top cell; lef write \"$@\" -pinonly -hide" | magic -rcfile $(MAGIC_RC) -noconsole -dnull
+# 2) Assemble the full macro (GDS + LEF): DEF frame + pins + power stripes + placed ring.
+$(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) scripts/build_gf180_macro.py $(DEF)
+	python3 scripts/build_gf180_macro.py $(RING_GDS) $(DEF) $(TARGET_GDS)
 
+# Extract a SPICE netlist for simulation/LVS.
 $(SPICE): $(TARGET_GDS)
 	magic -rcfile $(MAGIC_RC) -noconsole -dnull scripts/extract_for_sim.tcl $< $@ $(MACRO)
 
-spice/pdk_lib.spice:
-	echo ".lib '$(PDK_ROOT)/$(PDK)/libs.tech/ngspice/models/cornerCAP.lib cap_typ' tt" > $@
-	echo ".lib '$(PDK_ROOT)/$(PDK)/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt' tt" >> $@
-	echo ".include '$(PDK_ROOT)/$(PDK)/libs.ref/sg13g2_stdcell/spice/sg13g2_stdcell.spice'" >> $@
-
-sim: $(SPICE) spice/pdk_lib.spice spice/testbench.spice
-	ngspice spice/testbench.spice
-.phony: sim drc
-
-docs/layout_sim.svg:
-	ngspice -b spice/testbench.spice spice/write_plot.spice
-
-docs/layout_sim.png: docs/layout_sim.svg
-	rsvg-convert -f png -o $@ $<
-
+# Magic sign-off DRC (matches one of the TT precheck steps).
 drc: $(TARGET_GDS)
-	klayout -b -r $(PWD)/drc/sg13g2_mr.lydrc -rd 'in_gds=$<' -rd density=0
-.phony: drc
+	echo "gds read $<; load $(MACRO); select top cell; drc euclidean on; drc check; drc catchup; \
+		puts \"DRC violations: [drc list count total]\"" | \
+		magic -rcfile $(MAGIC_RC) -noconsole -dnull
+.PHONY: drc
 
-drc_max: $(TARGET_GDS)
-	klayout -b -r $(PWD)/drc/sg13g2_maximal.lydrc -rd 'in_gds=$<' -rd density=0
-.phony: drc_max
+# KLayout FEOL/BEOL DRC (as run in CI precheck).
+drc_klayout: $(TARGET_GDS)
+	klayout -b -r $(DRC_DECK) -rd input=$(PWD)/$< -rd report=$(PWD)/drc/gf180_drc.lyrdb
+.PHONY: drc_klayout
 
 clean:
-	rm -f $(TARGET_GDS) $(SPICE)
-.phony: clean
+	rm -f $(TARGET_GDS) $(RING_GDS) $(SPICE)
+.PHONY: clean

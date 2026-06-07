@@ -11,7 +11,7 @@ from PIL import Image
 from klayout.lay import LayoutView
 
 PDK_ROOT = os.environ.get("PDK_ROOT")
-PDK = os.environ.get("PDK", "ihp-sg13g2")
+PDK = os.environ.get("PDK", "gf180mcuD")
 
 
 def render_gds(
@@ -24,7 +24,7 @@ def render_gds(
     lv = LayoutView()
     lv.load_layout(gds_path)
     lv.max_hier()
-    lv.load_layer_props(f"{PDK_ROOT}/{PDK}/libs.tech/klayout/tech/sg13g2.lyp")
+    lv.load_layer_props(f"{PDK_ROOT}/{PDK}/libs.tech/klayout/tech/gf180mcu.lyp")
     lv.set_config("background-color", "#ffffff")
     lv.set_config("grid-visible", "false")
     lv.set_config("text-visible", "false")
