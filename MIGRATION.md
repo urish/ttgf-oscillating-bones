@@ -37,36 +37,36 @@ die outline, and the skull ring placed in the centre. Emits the matching LEF (co
 ## What is validated ✅
 
 - **Magic DRC: 0 violations** (full macro).
+- **Post-layout SPICE oscillates.** Extracting the hardened GDS with magic and simulating with the
+  gf180mcuD ngspice models, the 21-stage ring oscillates **rail-to-rail at ~122 MHz**, and the raw
+  oscillation reaches the **`ua[0]` (osc_out_3v3)** pin. The extracted netlist is a clean, closed
+  21-stage CMOS ring with **VGND and VDPWR as separate supplies** (21 transistors each), each driven
+  by its power stripe. (Reproduce with `scripts/sim_ring.sh` — see below — or `make spice` + ngspice.)
 - **TT precheck structural checks pass** (run locally against `tt-support-tools/precheck`):
-  KLayout Checks (top name / no forbidden Metal5 / PR_bndry present), Boundary check, Layer check
-  (only valid gf180 layers), Cell name check, Power pin check (VGND/VDPWR with USE in LEF + Verilog),
-  Analog pin check (`ua[0]` connected), Pin check (all pins match the DEF template).
+  KLayout Checks, Boundary check, Layer check, Cell name check, Power pin check, Analog pin check,
+  Pin check.
 - **Verilog syntax check** passes (yosys).
-- Config migrated: `info.yaml` (analog_pins: 1, `ua[0]=osc_out_3v3`, `uses_vapwr: false`),
-  workflows (`@ttgf26a`, `pdk: gf180mcuD`), `src/project.v` (VGND/VDPWR ports), `Makefile`.
+- Config migrated: `info.yaml`, workflows (`@ttgf26a`, `pdk: gf180mcuD`), `src/project.v`, `Makefile`.
 
-The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and
-run in CI; magic DRC — the heaviest precheck — is clean locally.
+Two key fixes were needed to get the post-layout netlist to oscillate: (a) the inverter cells
+carried decorative power-ring stubs on the upper metals that, after the 7→4 metal collapse, shorted
+each inverter's VGND to VDPWR — these are dropped in the remap; (b) the per-inverter A/Y pin labels
+must NOT be carried into the flattened ring (they would merge all inputs/outputs); inter-stage
+connectivity is geometric. The macro's two power stripes sit on opposite die edges so their Metal4
+connectors don't cross the other stripe.
+
+The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and run
+in CI; magic DRC runs clean locally.
 
 ## Remaining functional finalisation ⚠️
 
-The macro is structurally submittable and DRC-clean, but the following net-level work needs the
-designer's topology knowledge to make it fully functional:
-
-1. **Oscillator output tap.** `ua[0]` and the `uo_out[*]` pins are currently routed to the ring's
-   *outer power ring*, not to a live oscillating inter-stage node. Tap an actual inter-stage node
-   (a Metal3 node between two adjacent inverters) and route it to `uo_out[0]` (and `ua[0]` for the
-   raw 3.3V output). This is best done by keeping the inverter hierarchy / net names rather than
-   the flattened ring.
-2. **Frequency divider.** The original /2 /4 /8 divider used IHP `sg13g2_dfrbp_2` DFFs. These are
-   not yet in the gf180 macro. Substitute gf180 std-cell DFFs (e.g. `gf180mcu_fd_sc_mcu7t5v0__dffrnq_1`
-   from the PDK), place + re-wire 3 stages clocked by `osc_out`, reset by `rst_n`, outputs to
-   `uo_out[1..3]`. (These are pre-built DRC-clean cells — place unscaled, do not 1.45× them.)
-3. **Power connectivity / LVS.** The two concentric power rings (inner r≈93 µm = one supply, outer
-   r≈128 µm = the other) are connected to the VGND/VDPWR stripes best-effort; verify which ring is
-   VGND vs VDPWR against the inverter orientation and run LVS (netgen) to confirm connectivity.
-4. **Simulation.** Re-extract SPICE (`make spice`) and simulate to characterise the new gf180
-   oscillation frequency; update `docs/info.md` and regenerate `docs/layout_sim.png`.
-5. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
-   symbols/models and need updating to gf180 (`pfet_03v3`/`nfet_03v3`, gf180 ngspice models) for
-   the simulation cross-check.
+1. **Digital outputs `uo_out[0..3]`.** Only `ua[0]` is wired today. Route the OSC node (the Metal4
+   tap the remap creates) to `uo_out[0]` (osc_out), and add the divider for `uo_out[1..3]`.
+2. **Frequency divider.** The original /2 /4 /8 divider used IHP `sg13g2_dfrbp_2` DFFs, not yet in
+   the gf180 macro. Substitute gf180 std-cell DFFs (e.g. `gf180mcu_fd_sc_mcu7t5v0__dffrnq_1`), place
+   + re-wire 3 stages clocked by osc_out, reset by `rst_n`. (Pre-built DRC-clean cells — place
+   unscaled, do not 1.45× them.)
+3. **LVS.** Run netgen LVS of the extracted netlist against a schematic to formally confirm
+   connectivity.
+4. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
+   symbols/models; update to gf180 (`pfet_03v3`/`nfet_03v3`, gf180 ngspice models).

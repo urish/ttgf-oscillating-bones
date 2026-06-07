@@ -65,6 +65,18 @@ def via_stack_m4_m2(cell, x, y):
         cell.add(gdstk.rectangle((x - s, y - s), (x + s, y + s), layer=lay[0], datatype=lay[1]))
 
 
+def via_m4_m3(cell, x, y):
+    """M4<->M3 connection: M4 + M3 landing pads (1.0um) with a 2x2 Via3 array (0.26 cuts)."""
+    s = VIA_SZ / 2
+    pad = 0.7
+    for lay in (M4, M3):
+        cell.add(gdstk.rectangle((x - pad, y - pad), (x + pad, y + pad), layer=lay[0], datatype=lay[1]))
+    for dx in (-0.28, 0.28):
+        for dy in (-0.28, 0.28):
+            cell.add(gdstk.rectangle((x + dx - s, y + dy - s), (x + dx + s, y + dy + s),
+                                     layer=VIA3[0], datatype=VIA3[1]))
+
+
 def build(ring_gds, def_path, out_gds):
     W, H, pins = parse_def(def_path)
     cx, cy = W / 2, H / 2
@@ -85,39 +97,52 @@ def build(ring_gds, def_path, out_gds):
     for nm, d, rect in pins:
         add_pin(top, nm, rect)
 
-    # --- power stripes (vertical Metal4 bars), per magic_init convention ---
-    # VDPWR stripe at the outer-ring left tangent so it contacts the OUTER ring.
-    vdpwr_x = cx - 128 * 1.0   # outer power-ring radius in ring-local was 128 (already scaled)
-    # (ring already scaled; its outer power ring sits at radius ~128 from centre)
-    for name, x in (("VDPWR", cx - 128.0), ("VGND", 2.0 + STRIPE_W / 2)):
+    # --- power stripes + connections to the SkullFET supply pads ---
+    # The inverters' VGND/VDPWR pads (Metal3, labelled in the ring) ARE the supply nets.
+    # We connect a left-edge Metal4 stripe to one such pad per supply with a Metal4 connector
+    # (which passes harmlessly over the Metal3 outer ring) + a via3 landing on the pad. Reading
+    # the actual label positions guarantees we hit the correct net (no inner/outer guesswork).
+    def supply_pad(text, target_angle):
+        """The VGND/VDPWR pad nearest target_angle (deg), in macro coordinates."""
+        cands = []
+        for lb in ring.labels:
+            if lb.text == text:
+                a = math.degrees(math.atan2(lb.origin[1], lb.origin[0])) % 360
+                da = min(abs(a - target_angle), 360 - abs(a - target_angle))
+                cands.append((da, lb.origin[0] + cx, lb.origin[1] + cy))
+        cands.sort()
+        return cands[0][1], cands[0][2]
+
+    # VGND stripe on the LEFT edge -> a VGND pad on the left side (angle ~180).
+    # VDPWR stripe on the RIGHT edge -> a VDPWR pad on the right side (angle ~0).
+    # Opposite sides so neither horizontal Metal4 connector crosses the other vertical stripe.
+    supply = {"VGND": (3.0 + STRIPE_W / 2, 180.0), "VDPWR": (W - 3.0 - STRIPE_W / 2, 0.0)}
+    pad_pos = {}
+    for name, (x, ang) in supply.items():
         x1, x2 = x - STRIPE_W / 2, x + STRIPE_W / 2
         top.add(gdstk.rectangle((x1, 5.0), (x2, H - 5.0), layer=M4[0], datatype=M4[1]))
         top.add(gdstk.rectangle((x1, 5.0), (x2, H - 5.0), layer=M4PIN[0], datatype=M4PIN[1]))
         top.add(gdstk.Label(name, (x, cy), layer=M4PIN[0], texttype=M4PIN[1]))
+        px, py = supply_pad(name, ang)
+        pad_pos[name] = (px, py)
+        xa, xb = sorted((x1 if ang > 90 else x2, px))
+        top.add(gdstk.rectangle((xa, py - 0.6), (xb, py + 0.6), layer=M4[0], datatype=M4[1]))
+        via_m4_m3(top, px, py)
 
-    # VGND -> inner ring (radius ~93) via a Metal2 underpass that ducks under the
-    # outer ring, entering through the bottom gap (y below the ring) to avoid the
-    # inverters which sit on the ring band.
-    inner_r = 93.0
-    # bottom tangent of inner ring:
-    iy = cy - inner_r
-    gx = cx
-    via_stack_m4_m2(top, gx, iy + 1.0)                     # tap inner ring (M4) -> M2
-    # M2 run from inner-ring bottom down to y=5, then left to the VGND stripe, then up
-    top.add(gdstk.rectangle((gx - 0.3, 5.0), (gx + 0.3, iy + 1.0), layer=M2[0], datatype=M2[1]))
-    top.add(gdstk.rectangle((2.0, 5.0), (gx + 0.3, 5.6), layer=M2[0], datatype=M2[1]))
-    via_stack_m4_m2(top, 2.0 + STRIPE_W / 2, 5.3)          # M2 -> VGND stripe (M4)
-
-    # --- analog output ua[0] -> tap the ring (outer edge), bottom-right ---
+    # --- analog output ua[0] = osc_out_3v3: tap the live OSC node (a ring inter-stage output
+    # brought up to Metal4 + labelled "OSC" by the remap) and route it to the ua[0] pin.
+    osc_xy = None
+    for lb in ring.labels:
+        if lb.text == "OSC":
+            osc_xy = (lb.origin[0] + cx, lb.origin[1] + cy)
     ua0 = next(r for (n, d, r) in pins if n == "ua[0]")
     ua0_cx = (ua0[0] + ua0[2]) / 2
-    # route Metal4 from ua[0] up to the ring outer edge near the bottom-right
-    tap_x = cx + (r_outer - 2.0) * math.cos(math.radians(-35))
-    tap_y = cy + (r_outer - 2.0) * math.sin(math.radians(-35))
-    # L-route on Metal4: up from ua[0], then to tap
-    top.add(gdstk.rectangle((ua0_cx - 0.4, ua0[1]), (ua0_cx + 0.4, tap_y), layer=M4[0], datatype=M4[1]))
-    x_lo, x_hi = sorted((ua0_cx, tap_x))
-    top.add(gdstk.rectangle((x_lo, tap_y - 0.4), (x_hi, tap_y + 0.4), layer=M4[0], datatype=M4[1]))
+    if osc_xy:
+        ox, oy = osc_xy
+        # L-route on Metal4: up from ua[0] to the OSC y, then across to OSC x
+        top.add(gdstk.rectangle((ua0_cx - 0.5, ua0[1]), (ua0_cx + 0.5, oy + 0.5), layer=M4[0], datatype=M4[1]))
+        x_lo, x_hi = sorted((ua0_cx, ox))
+        top.add(gdstk.rectangle((x_lo, oy - 0.5), (x_hi, oy + 0.5), layer=M4[0], datatype=M4[1]))
 
     lib.write_gds(out_gds)
     bb = top.bounding_box()
@@ -127,8 +152,8 @@ def build(ring_gds, def_path, out_gds):
     # --- write the matching LEF (precheck wants correct SIZE + USE POWER/GROUND) ---
     lef_path = out_gds.replace("gds/", "lef/").replace(".gds", ".lef")
     write_lef(lef_path, W, H, pins,
-              vdpwr=(cx - 128.0 - STRIPE_W / 2, 5.0, cx - 128.0 + STRIPE_W / 2, H - 5.0),
-              vgnd=(2.0, 5.0, 2.0 + STRIPE_W, H - 5.0))
+              vdpwr=(W - 3.0 - STRIPE_W, 5.0, W - 3.0, H - 5.0),
+              vgnd=(3.0, 5.0, 3.0 + STRIPE_W, H - 5.0))
     print(f"wrote {lef_path}")
 
 

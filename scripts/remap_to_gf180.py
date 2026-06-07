@@ -39,18 +39,25 @@ LMAP = {
     (49, 0):  (40, 0),    # Via3
     (50, 0):  (46, 0),    # Metal4
     (50, 2):  (46, 10),   # Metal4.pin
-    (50, 23): (46, 0),    # Metal4 power-ring art
     (66, 0):  (41, 0),    # Via4       -> (M4-M5 normally; rings collapse to M4)
     (67, 0):  (46, 0),    # Metal5     -> Metal4 (collapse)
-    (67, 23): (46, 0),    # Metal5 power-ring art -> Metal4
     (125, 0): (41, 0),    # TopVia1    -> Via4
     (126, 0): (46, 0),    # TopMetal1  -> Metal4 (collapse)
     (126, 2): (46, 10),   # TopMetal1.pin -> Metal4.pin
-    (126, 23):(46, 0),    # TopMetal1 power-ring art -> Metal4
-    (134, 23):(42, 0),    # TopMetal2 power-ring art -> Metal3 (keep distinct from M4)
+    # text/label purposes (datatype 25 in IHP) -> gf180 label datatype 10
+    (8, 25):  (34, 10),
+    (10, 25): (36, 10),
+    (30, 25): (42, 10),
+    (50, 25): (46, 10),
+    (126, 25):(46, 10),
 }
-# IHP layers that are dropped (regenerated or non-fab recognition/art):
-DROP = {(14, 0), (30, 23), (160, 0), (189, 4)}
+# IHP layers that are dropped (regenerated implants, recognition, or decorative power-ring
+# copies on the upper metals). The functional power rings live on Metal3 (30/0); the stacked
+# decorative copies on Metal4/5/TopMetal1/2 would, after the 7->4 metal collapse, bridge the
+# VGND and VDPWR rails together (they sit on top of both) and short the supplies, so they are
+# dropped rather than collapsed.
+DROP = {(14, 0), (30, 23), (160, 0), (189, 4),
+        (50, 23), (67, 23), (126, 23), (134, 23)}
 
 # gf180 device layers
 COMP, NWELL, PPLUS, NPLUS, LVPWELL = (22, 0), (21, 0), (31, 0), (32, 0), (204, 0)
@@ -110,7 +117,37 @@ def remap_flat(in_gds, top_name, scale=SCALE):
     for p in kept + implants:
         p.scale(scale)
         nc.add(p)
+    # Bring one inverter output up to Metal4 and label it OSC so the macro can tap the live
+    # oscillation cleanly. We pick the "Y" (output) pin nearest angle 0 (the rightmost stage);
+    # its node is on Metal1/Metal2, so we stack Via2/Via3 up to a Metal4 pad.
+    import math as _m
+    ys = [lb for lb in flat.labels if lb.text == "Y"]
+    if ys:
+        # nearest angle -45 deg (bottom-right), close to the ua[0] pin, away from the supply pads
+        def _adist(lb):
+            a = _m.degrees(_m.atan2(lb.origin[1], lb.origin[0])) % 360
+            return min(abs(a - 315), 360 - abs(a - 315))
+        osc = min(ys, key=_adist)
+        ox, oy = osc.origin[0] * scale, osc.origin[1] * scale
+        s = 0.13
+        for lay in ((36, 0), (42, 0), (46, 0)):           # M2/M3/M4 landing pads
+            nc.add(gdstk.rectangle((ox - 0.6, oy - 0.6), (ox + 0.6, oy + 0.6),
+                                   layer=lay[0], datatype=lay[1]))
+        for lay in ((38, 0), (40, 0)):                    # Via2 (M2-M3), Via3 (M3-M4)
+            for dx in (-0.28, 0.28):
+                for dy in (-0.28, 0.28):
+                    nc.add(gdstk.rectangle((ox + dx - s, oy + dy - s), (ox + dx + s, oy + dy + s),
+                                           layer=lay[0], datatype=lay[1]))
+        nc.add(gdstk.Label("OSC", (ox, oy), layer=46, texttype=10))
+
+    # Only keep GLOBAL power labels. The per-inverter A/Y pin labels are local names; once the
+    # ring is flattened, keeping them would make magic merge every "A" (and every "Y") into one
+    # net, collapsing the 21-stage chain into 21 parallel inverters. Inter-stage connectivity is
+    # geometric (Y of stage i abuts A of stage i+1), so we drop the signal labels.
+    POWER_LABELS = {"VGND", "VDPWR", "VAPWR", "VPWR", "VDD", "VSS"}
     for lb in flat.labels:
+        if lb.text not in POWER_LABELS:
+            continue
         tgt = LMAP.get((lb.layer, lb.texttype))
         if tgt:
             nc.add(gdstk.Label(lb.text, (lb.origin[0] * scale, lb.origin[1] * scale),

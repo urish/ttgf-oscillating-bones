@@ -28,6 +28,11 @@ $(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) scripts/build_gf180_macro.py $(DEF)
 $(SPICE): $(TARGET_GDS)
 	magic -rcfile $(MAGIC_RC) -noconsole -dnull scripts/extract_for_sim.tcl $< $@ $(MACRO)
 
+# Post-layout simulation: extract + ngspice, report the oscillation frequency on ua[0].
+sim: $(TARGET_GDS)
+	bash scripts/sim_ring.sh
+.PHONY: sim
+
 # Magic sign-off DRC (matches one of the TT precheck steps).
 drc: $(TARGET_GDS)
 	echo "gds read $<; load $(MACRO); select top cell; drc euclidean on; drc check; drc catchup; \

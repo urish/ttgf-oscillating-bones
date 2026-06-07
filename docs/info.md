@@ -23,21 +23,25 @@ minimum width/spacing/gate rules — see `scripts/remap_to_gf180.py`).
 
 | Pin       | Signal      |
 |-----------|-------------|
+| ua[0]     | osc_out_3v3 (raw 3.3V oscillation) |
 | uo_out[0] | osc_out     |
 | uo_out[1] | osc_div_2   |
 | uo_out[2] | osc_div_4   |
 | uo_out[3] | osc_div_8   |
-| ua[0]     | osc_out_3v3 (raw 3.3V oscillation) |
 
-> **Note:** the oscillation frequency on gf180mcu differs from the IHP version and must be
-> re-characterised in simulation. The 180nm devices and 1.45× geometry give a lower frequency
-> than the original ~150 MHz; the divided taps (`osc_div_8` / `uo_out[3]`) are the easiest to
-> observe on a scope.
+**Post-layout simulation:** the ring oscillates **rail-to-rail at ~122 MHz** on gf180mcu
+(vs ~150 MHz on IHP — slightly lower as expected for the 180nm node and 1.45× geometry). The raw
+oscillation is brought out on the analog pin **`ua[0]` (osc_out_3v3)**, verified by extracting the
+hardened GDS with magic and simulating with the gf180mcuD ngspice models.
+
+> The digital outputs `uo_out[0..3]` (osc_out + /2 /4 /8 divider) still need their pin routing and
+> the gf180 std-cell divider — see [`MIGRATION.md`](../MIGRATION.md). The working output today is
+> `ua[0]`.
 
 ## How to test
 
-Connect an oscilloscope to one of the output pins (e.g. `osc_div_8` / `uo_out[3]`) and enjoy the
-show. The raw 3.3V oscillation is also available on the analog pin `ua[0]`.
+Connect an oscilloscope to the analog pin **`ua[0]`** to see the raw ~122 MHz oscillation. (Note
+that 122 MHz exceeds typical GPIO bandwidth, so the analog pin is the best observation point.)
 
 ## External hardware
 
