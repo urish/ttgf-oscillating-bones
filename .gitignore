@@ -13,3 +13,10 @@ tt_um_oscillating_bones.ext
 tt_um_oscillating_bones.nodes
 tt_um_oscillating_bones.res.ext
 tt_um_oscillating_bones.sim
+
+# magic extraction artifacts
+*.ext
+*.res.ext
+*.nodes
+*.sim
+*.spice.bak
