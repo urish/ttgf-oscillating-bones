@@ -24,3 +24,6 @@ tt_um_oscillating_bones.sim
 # python cache
 __pycache__/
 *.pyc
+
+# lvs report
+lvs.report

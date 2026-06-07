@@ -33,6 +33,11 @@ sim: $(TARGET_GDS)
 	bash scripts/sim_ring.sh
 .PHONY: sim
 
+# Netgen LVS: layout (magic extraction) vs the intended structural source netlist.
+lvs: $(TARGET_GDS)
+	bash scripts/run_lvs.sh
+.PHONY: lvs
+
 # Magic sign-off DRC (matches one of the TT precheck steps).
 drc: $(TARGET_GDS)
 	echo "gds read $<; load $(MACRO); select top cell; drc euclidean on; drc check; drc catchup; \

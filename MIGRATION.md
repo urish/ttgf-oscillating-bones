@@ -73,9 +73,17 @@ Metal3 dip under the VGND supply connector. `uo_out[0]=osc_out`, `uo_out[1..3]=o
 
 Post-layout SPICE confirms **/2, /4, /8** (≈59 / 30 / 15 MHz from the ≈119 MHz ring).
 
+## LVS (`make lvs`)
+
+`scripts/run_lvs.sh` extracts the layout with magic and runs **netgen** against an intended
+structural source netlist (`scripts/gen_lvs_source.py` — a 21-stage CMOS inverter ring +
+`dffrnq_1`/`inv_2` divider). netgen reports **all device classes equivalent**: `nfet_03v3 (21)`,
+`pfet_03v3 (21)`, the 3 DFFs and 3 inverters all match between layout and source. The one
+remaining top-level pin note is that **`ua[0]` and `uo_out[0]` intentionally share the `osc_out`
+net** (raw oscillation on both the analog and a digital pin). Requires `netgen` + `magic` on PATH.
+
 ## Remaining finalisation ⚠️
 
-1. **LVS.** Run netgen LVS of the extracted netlist against a schematic to formally confirm
-   connectivity (post-layout extraction + simulation already pass).
-2. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
-   symbols/models; update to gf180 (`pfet_03v3`/`nfet_03v3`, gf180 ngspice models).
+1. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
+   symbols/models; update to gf180 (`pfet_03v3`/`nfet_03v3`, gf180 ngspice models) for the
+   schematic-level cross-check. (Post-layout extraction + simulation + netgen LVS already pass.)
