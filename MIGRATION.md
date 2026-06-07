@@ -37,11 +37,12 @@ die outline, and the skull ring placed in the centre. Emits the matching LEF (co
 ## What is validated ✅
 
 - **Magic DRC: 0 violations** (full macro).
-- **Post-layout SPICE oscillates.** Extracting the hardened GDS with magic and simulating with the
-  gf180mcuD ngspice models, the 21-stage ring oscillates **rail-to-rail at ~122 MHz**, and the raw
-  oscillation reaches the **`ua[0]` (osc_out_3v3)** pin. The extracted netlist is a clean, closed
-  21-stage CMOS ring with **VGND and VDPWR as separate supplies** (21 transistors each), each driven
-  by its power stripe. (Reproduce with `scripts/sim_ring.sh` — see below — or `make spice` + ngspice.)
+- **Post-layout SPICE oscillates and divides.** Extracting the hardened GDS with magic and
+  simulating with the gf180mcuD ngspice models (`make sim`), the 21-stage ring oscillates
+  **rail-to-rail at ~119 MHz**, and the std-cell ripple divider produces clean **/2, /4, /8** taps:
+  `uo_out[0]=osc_out` ~119 MHz, `uo_out[1..3]=osc_div_2/4/8` ~59/30/15 MHz, plus the raw 3.3V
+  oscillation on `ua[0]`. The extracted netlist is a clean closed 21-stage CMOS ring with VGND/VDPWR
+  as separate supplies and properly-tied std-cell wells.
 - **TT precheck structural checks pass** (run locally against `tt-support-tools/precheck`):
   KLayout Checks, Boundary check, Layer check, Cell name check, Power pin check, Analog pin check,
   Pin check.
@@ -58,15 +59,23 @@ connectors don't cross the other stripe.
 The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and run
 in CI; magic DRC runs clean locally.
 
-## Remaining functional finalisation ⚠️
+## The /2 /4 /8 divider (`scripts/build_divider.py`)
 
-1. **Digital outputs `uo_out[0..3]`.** Only `ua[0]` is wired today. Route the OSC node (the Metal4
-   tap the remap creates) to `uo_out[0]` (osc_out), and add the divider for `uo_out[1..3]`.
-2. **Frequency divider.** The original /2 /4 /8 divider used IHP `sg13g2_dfrbp_2` DFFs, not yet in
-   the gf180 macro. Substitute gf180 std-cell DFFs (e.g. `gf180mcu_fd_sc_mcu7t5v0__dffrnq_1`), place
-   + re-wire 3 stages clocked by osc_out, reset by `rst_n`. (Pre-built DRC-clean cells — place
-   unscaled, do not 1.45× them.)
-3. **LVS.** Run netgen LVS of the extracted netlist against a schematic to formally confirm
-   connectivity.
-4. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
+The divider is a 3-stage ripple counter of `gf180mcu_fd_sc_mcu7t5v0` std cells: each /2 stage is a
+**`dffrnq_1`** DFF + an **`inv_2`** wired as a toggle FF (D = ~Q, since gf180 DFFs have no QN). The
+cells are abutted into a continuous row with **`filltie`** cells between every cell and **`endcap`**
+cells at the ends — these tie Nwell→VDD and Pwell→VSS (the std cells expose VNW/VPW only as well
+layers, so without these taps the wells float and the cells don't work). It is placed in the top
+strip and connected by a small **channel router** (in `add_divider`): Metal3 = horizontal tracks
+(one unique y per net), Metal4 = vertical risers (unique x), so cross-net crossings can't short;
+the clock enters from the bottom (tapped off the `ua[0]`/OSC node *outside* the ring) and takes one
+Metal3 dip under the VGND supply connector. `uo_out[0]=osc_out`, `uo_out[1..3]=osc_div_2/4/8`.
+
+Post-layout SPICE confirms **/2, /4, /8** (≈59 / 30 / 15 MHz from the ≈119 MHz ring).
+
+## Remaining finalisation ⚠️
+
+1. **LVS.** Run netgen LVS of the extracted netlist against a schematic to formally confirm
+   connectivity (post-layout extraction + simulation already pass).
+2. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
    symbols/models; update to gf180 (`pfet_03v3`/`nfet_03v3`, gf180 ngspice models).

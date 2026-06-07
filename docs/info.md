@@ -21,27 +21,25 @@ minimum width/spacing/gate rules — see `scripts/remap_to_gf180.py`).
 
 ![Layout](layout.png)
 
-| Pin       | Signal      |
-|-----------|-------------|
-| ua[0]     | osc_out_3v3 (raw 3.3V oscillation) |
-| uo_out[0] | osc_out     |
-| uo_out[1] | osc_div_2   |
-| uo_out[2] | osc_div_4   |
-| uo_out[3] | osc_div_8   |
+| Pin       | Signal      | Post-layout frequency |
+|-----------|-------------|-----------------------|
+| ua[0]     | osc_out_3v3 (raw 3.3V oscillation) | ~119 MHz |
+| uo_out[0] | osc_out     | ~119 MHz |
+| uo_out[1] | osc_div_2   | ~59 MHz  |
+| uo_out[2] | osc_div_4   | ~30 MHz  |
+| uo_out[3] | osc_div_8   | ~15 MHz  |
 
-**Post-layout simulation:** the ring oscillates **rail-to-rail at ~122 MHz** on gf180mcu
-(vs ~150 MHz on IHP — slightly lower as expected for the 180nm node and 1.45× geometry). The raw
-oscillation is brought out on the analog pin **`ua[0]` (osc_out_3v3)**, verified by extracting the
-hardened GDS with magic and simulating with the gf180mcuD ngspice models.
-
-> The digital outputs `uo_out[0..3]` (osc_out + /2 /4 /8 divider) still need their pin routing and
-> the gf180 std-cell divider — see [`MIGRATION.md`](../MIGRATION.md). The working output today is
-> `ua[0]`.
+**Post-layout simulation** (extract the hardened GDS with magic, simulate with the gf180mcuD
+ngspice models — run `make sim`): the ring oscillates **rail-to-rail at ~119 MHz** (vs ~150 MHz on
+IHP — slightly lower as expected for the 180nm node and 1.45× geometry), and the std-cell ripple
+divider produces clean **/2, /4, /8** taps on `uo_out[1..3]`. The raw 3.3V oscillation is also on
+the analog pin `ua[0]`.
 
 ## How to test
 
-Connect an oscilloscope to the analog pin **`ua[0]`** to see the raw ~122 MHz oscillation. (Note
-that 122 MHz exceeds typical GPIO bandwidth, so the analog pin is the best observation point.)
+Connect an oscilloscope to **`osc_div_8` / `uo_out[3]`** (~15 MHz, scope-friendly) and enjoy the
+show. The faster taps (`osc_out`, `osc_div_2`) exceed typical GPIO bandwidth — observe the raw
+oscillation on the analog pin **`ua[0]`** instead.
 
 ## External hardware
 

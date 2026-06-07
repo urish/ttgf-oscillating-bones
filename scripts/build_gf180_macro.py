@@ -120,57 +120,65 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     pinrect = {n: r for (n, d, r) in pins}
     pin_cx = lambda n: (pinrect[n][0] + pinrect[n][2]) / 2
 
-    # power straps: VSS rail -> VGND stripe (left); VDD rail -> VDPWR stripe (right)
-    vss_y = DY0 - 0.0
-    _wire(top, [(5.0, vss_y), (DX0 + 2, vss_y)], w=0.6, layer=M2)
-    _via(top, 5.0, vss_y, [M1, M2, M3, M4]); _via(top, DX0 + 2, vss_y, [M1, M2])
-    vdd_y = DY0 + 3.9
-    vdd_tap = DX0 + 78.0     # in the last inter-cell gap (clear VDD rail bridge)
-    _wire(top, [(vdd_tap, vdd_y), (cx + 168, vdd_y)], w=0.6, layer=M2)
-    _via(top, cx + 168, vdd_y, [M1, M2, M3, M4]); _via(top, vdd_tap, vdd_y, [M1, M2])
-    # well taps: tie nwell (VDD strap) and pwell (VSS strap) regions
-    # (the std-cell VDD/VSS M1 rails already overlap VNW/VPW; the straps bias them)
+    # ---------------------------------------------------------------------------------------
+    # Channel routing. Discipline: M3 = horizontal tracks (a unique y per net), M4 = vertical
+    # risers (a unique x per endpoint). Different-net M3xM4 crossings can't short. Std-cell
+    # pins are M1/M2 -> via up at each pin. Only the clock (entering from the bottom edge) must
+    # dodge the M4 VGND supply connector (~y154) with one short M3 dip. Track y's are all
+    # distinct and the M4 columns are spaced apart (see the floorplan map).
+    def mvia(x, y):
+        _via(top, x, y, [M3, M4])
 
-    # clock: the ring's OSC node is tapped to ua[0] (build()) which already brings it OUTSIDE
-    # the ring at the bottom edge. We tap there (NOT inside the dense ring, which shorts it) and
-    # route along the bottom and up the far-LEFT edge (x < ring-left), dipping to M3 only under
-    # the VGND supply connector (~y 154), then across the top to the divider CLK.
+    VGND_X, VDPWR_X = 5.0, W - 5.0
+    rail_vss, rail_vdd = DY0, DY0 + 3.9
+    t_vss, t_vdd, t_div2, t_div4, t_div8, t_rn, t_clk, t_uo0 = (
+        DY0, DY0 + 4.5, DY0 + 7, DY0 + 9, DY0 + 11, DY0 + 13, DY0 + 15.5, DY0 + 18)
+
+    # VSS rail -> VGND stripe (M3 at the rail level). Tap on a filltie column (no signal metal).
+    vss_tap, vdd_tap = 169.5, 120.2     # filltie columns, clear of the DIV2/4/8 Q risers
+    _via(top, vss_tap, rail_vss, [M1, M2, M3])
+    _wire(top, [(vss_tap, rail_vss), (VGND_X, rail_vss)], w=0.4, layer=M3)
+    mvia(VGND_X, rail_vss)
+
+    # VDD rail -> VDPWR stripe (M3 at the rail level, tap on a filltie column)
+    _via(top, vdd_tap, rail_vdd, [M1, M2, M3])
+    _wire(top, [(vdd_tap, rail_vdd), (VDPWR_X, rail_vdd)], w=0.4, layer=M3)
+    mvia(VDPWR_X, rail_vdd)
+
+    # clock: ua[0] (OSC, brought outside the ring) -> CLK, up the left edge with an M3 dip
     ua0r = next(r for (n, d, r) in pins if n == "ua[0]")
-    tapx = (ua0r[0] + ua0r[2]) / 2          # ~327, outside the ring
-    csx = 28.0                              # left-edge clock column (ring left edge ~cx-128=45)
-    _wire(top, [(tapx, ua0r[1]), (tapx, 22.0), (csx, 22.0)], w=0.4, layer=M4)   # bottom, below ring
-    _wire(top, [(csx, 22.0), (csx, 150.0)], w=0.4, layer=M4)
-    _via(top, csx, 150.0, [M3, M4]); _wire(top, [(csx, 150.0), (csx, 160.0)], w=0.4, layer=M3)
-    _via(top, csx, 160.0, [M3, M4]); _wire(top, [(csx, 160.0), (csx, DY0 + 8.0)], w=0.4, layer=M4)
+    tapx = (ua0r[0] + ua0r[2]) / 2
+    csx = 20.0
+    _wire(top, [(tapx, 0.5), (tapx, 22.0), (csx, 22.0)], w=0.4, layer=M4)   # bottom, below ring
+    _wire(top, [(csx, 22.0), (csx, 148.0)], w=0.4, layer=M4)
+    mvia(csx, 148.0); _wire(top, [(csx, 148.0), (csx, 162.0)], w=0.4, layer=M3)  # dip under VGND connector
+    mvia(csx, 162.0); _wire(top, [(csx, 162.0), (csx, t_clk)], w=0.4, layer=M4)
+    mvia(csx, t_clk); _wire(top, [(csx, t_clk), (97.0, t_clk)], w=0.4, layer=M3)  # across to CLK column
     ck = P("CLK")
-    _via(top, csx, DY0 + 1.96, [M3, M4])
-    _wire(top, [(csx, DY0 + 1.96), (ck[0], DY0 + 1.96), ck], w=0.4, layer=M3)
-    _via(top, *ck, [M2, M3])
+    mvia(97.0, t_clk); _wire(top, [(97.0, t_clk), (97.0, ck[1])], w=0.4, layer=M4)
+    _via(top, ck[0], ck[1], [M2, M3, M4])
 
-    # osc_out -> uo_out[0]: branch off the clock column at the top
+    # osc_out -> uo_out[0]: tap the clock track (via connects the branch to the M3 clock track)
     u0 = pin_cx("uo_out[0]")
-    _wire(top, [(csx, DY0 + 8), (u0, DY0 + 8), (u0, pinrect["uo_out[0]"][1])], w=0.4, layer=M4)
+    mvia(90.0, t_clk)
+    _wire(top, [(90.0, t_clk), (90.0, t_uo0)], w=0.4, layer=M4); mvia(90.0, t_uo0)
+    _wire(top, [(90.0, t_uo0), (u0, t_uo0)], w=0.4, layer=M3); mvia(u0, t_uo0)
+    _wire(top, [(u0, t_uo0), (u0, pinrect["uo_out[0]"][1])], w=0.4, layer=M4)
 
-    # reset: rst_n pin (M4) -> divider RN. Routed on Metal4 so it passes OVER the clock's
-    # Metal3 spine without shorting (an M3 reset route crosses the M3 clock spine).
-    rn = P("RN")
-    rx = pin_cx("rst_n")
-    _wire(top, [(rx, pinrect["rst_n"][1]), (rx, DY0 - 2.2), (rn[0], DY0 - 2.2), rn], w=0.4, layer=M4)
-    _via(top, *rn, [M2, M3, M4])
+    # reset: rst_n pin -> divider RN
+    rn = P("RN"); rx = pin_cx("rst_n")
+    _wire(top, [(rx, pinrect["rst_n"][1]), (rx, t_rn)], w=0.4, layer=M4); mvia(rx, t_rn)
+    _wire(top, [(rx, t_rn), (rn[0], t_rn)], w=0.4, layer=M3); mvia(rn[0], t_rn)
+    _wire(top, [(rn[0], t_rn), (rn[0], rn[1])], w=0.4, layer=M4)
+    _via(top, rn[0], rn[1], [M2, M3, M4])
 
-    # outputs DIV2/DIV4/DIV8 -> uo_out[1..3]. The divider Qs are ordered left->right but the
-    # pins right->left, so the nets must cross: route each on a unique-y M3 horizontal track
-    # with M4 verticals (Q->track and track->pin) so crossings are M3-over-M4 (no shorts).
-    for j, (k, pin) in enumerate((("DIV2", "uo_out[1]"), ("DIV4", "uo_out[2]"), ("DIV8", "uo_out[3]"))):
-        qx, qy = P(k)
-        trk = DY0 + 11 + 3 * j
-        tx = pin_cx(pin)
-        _via(top, qx, qy, [M2, M3, M4])          # Q (M2) up to M4
-        _wire(top, [(qx, qy), (qx, trk)], w=0.4, layer=M4)
-        _via(top, qx, trk, [M3, M4])             # to the M3 track
-        _wire(top, [(qx, trk), (tx, trk)], w=0.4, layer=M3)
-        _via(top, tx, trk, [M3, M4])             # back up to M4 at the pin column
-        _wire(top, [(tx, trk), (tx, pinrect[pin][1])], w=0.4, layer=M4)
+    # outputs DIV2/DIV4/DIV8 -> uo_out[1..3]
+    for k, pin, trk in (("DIV2", "uo_out[1]", t_div2), ("DIV4", "uo_out[2]", t_div4),
+                        ("DIV8", "uo_out[3]", t_div8)):
+        qx, qy = P(k); tx = pin_cx(pin)
+        _via(top, qx, qy, [M2, M3, M4]); _wire(top, [(qx, qy), (qx, trk)], w=0.4, layer=M4)
+        mvia(qx, trk); _wire(top, [(qx, trk), (tx, trk)], w=0.4, layer=M3)
+        mvia(tx, trk); _wire(top, [(tx, trk), (tx, pinrect[pin][1])], w=0.4, layer=M4)
 
 
 def build(ring_gds, def_path, out_gds):
