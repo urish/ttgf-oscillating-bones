@@ -106,32 +106,11 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     """Place a /2/4/8 std-cell divider in the top strip and wire it up."""
     pdk_root = os.environ.get("PDK_ROOT", "")
     divcell, dp, std_cells = BD.build_divider(BD.STD_GDS_DEFAULT, pdk_root)
-    inv = std_cells[1]                       # inv_2, reused as the clock isolation buffer
     lib.add(divcell, *std_cells)
     DX0, DY0 = 95.0, 300.0     # Q columns sit left of the uo_out pins so output routes fan right
     top.add(gdstk.Reference(divcell, (DX0, DY0)))
-
-    # --- clock isolation buffer (inv_2) in the bottom strip, below the ring ---
-    # The ring's single OSC node cannot drive the long clock route + 5V DFF load without its
-    # oscillation collapsing, so we buffer it: ring -> short hop -> buffer -> everything else.
-    INV2_W = 3.36
-    W_RIGHT = 2 * cx - 5.0                    # near the VDPWR stripe (right edge)
-    ox0, oy0 = osc_xy
-    BX, BY = ox0 - 1.4, 10.0                  # buffer placement (bottom strip)
-    top.add(gdstk.Reference(inv, (BX, BY)))
-    bI = (BX + 1.39, BY + 1.91)               # inv_2 I pin
-    bZ = (BX + 1.44, BY + 3.00)               # inv_2 ZN pin (buffered, inverted osc)
-    # power the buffer: VSS rail -> VGND stripe (left), VDD rail -> VDPWR stripe (right)
-    _wire(top, [(5.0, BY + 0.0), (BX, BY + 0.0)], w=0.6, layer=M2)
-    _via(top, 5.0, BY + 0.0, [M1, M2, M3, M4]); _via(top, BX, BY + 0.0, [M1, M2])
-    _wire(top, [(BX + INV2_W, BY + 3.92), (W_RIGHT, BY + 3.92)], w=0.6, layer=M2)
-    _via(top, W_RIGHT, BY + 3.92, [M1, M2, M3, M4]); _via(top, BX + INV2_W, BY + 3.92, [M1, M2])
-    # ring OSC (M4) -> short hop down to the buffer input
-    _wire(top, [(ox0, oy0), (ox0, bI[1]), (bI[0], bI[1])], w=0.4, layer=M4)
-    _via(top, *bI, [M1, M2, M3, M4], m1=False)
-    # buffer output (ZN) becomes the clock source for the spine
-    _via(top, *bZ, [M1, M2, M3, M4], m1=False)
-    osc_xy = bZ                               # downstream clock/divider drive from the buffer
+    # The ring drives the divider clock directly (the std-cell wells are tied via filltie cells,
+    # so there is no floating-well clamp on the OSC node).
 
     def P(name):  # divider pin -> macro coords
         v = dp[name]
@@ -152,27 +131,32 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     # well taps: tie nwell (VDD strap) and pwell (VSS strap) regions
     # (the std-cell VDD/VSS M1 rails already overlap VNW/VPW; the straps bias them)
 
-    # clock: OSC (M4) -> down below the ring -> up the right edge on M3 -> divider CLK
-    ox, oy = osc_xy
-    clk_x = cx + 138.0          # right of the ring (ring outer ~cx+130)
-    _wire(top, [(ox, oy), (ox, 25.0), (clk_x, 25.0)], w=0.4, layer=M4)
-    _via(top, clk_x, 25.0, [M3, M4])
-    _wire(top, [(clk_x, 25.0), (clk_x, DY0 + 8.0)], w=0.4, layer=M3)   # M3 clock spine
+    # clock: the ring's OSC node is tapped to ua[0] (build()) which already brings it OUTSIDE
+    # the ring at the bottom edge. We tap there (NOT inside the dense ring, which shorts it) and
+    # route along the bottom and up the far-LEFT edge (x < ring-left), dipping to M3 only under
+    # the VGND supply connector (~y 154), then across the top to the divider CLK.
+    ua0r = next(r for (n, d, r) in pins if n == "ua[0]")
+    tapx = (ua0r[0] + ua0r[2]) / 2          # ~327, outside the ring
+    csx = 28.0                              # left-edge clock column (ring left edge ~cx-128=45)
+    _wire(top, [(tapx, ua0r[1]), (tapx, 22.0), (csx, 22.0)], w=0.4, layer=M4)   # bottom, below ring
+    _wire(top, [(csx, 22.0), (csx, 150.0)], w=0.4, layer=M4)
+    _via(top, csx, 150.0, [M3, M4]); _wire(top, [(csx, 150.0), (csx, 160.0)], w=0.4, layer=M3)
+    _via(top, csx, 160.0, [M3, M4]); _wire(top, [(csx, 160.0), (csx, DY0 + 8.0)], w=0.4, layer=M4)
     ck = P("CLK")
-    _wire(top, [(clk_x, DY0 + 1.96), (ck[0], DY0 + 1.96), ck], w=0.4, layer=M3)
+    _via(top, csx, DY0 + 1.96, [M3, M4])
+    _wire(top, [(csx, DY0 + 1.96), (ck[0], DY0 + 1.96), ck], w=0.4, layer=M3)
     _via(top, *ck, [M2, M3])
 
-    # osc_out -> uo_out[0]: branch off the clock at the top
+    # osc_out -> uo_out[0]: branch off the clock column at the top
     u0 = pin_cx("uo_out[0]")
-    _wire(top, [(clk_x, DY0 + 8), (u0, DY0 + 8), (u0, pinrect["uo_out[0]"][1])], w=0.4, layer=M4)
-    _via(top, clk_x, DY0 + 8, [M3, M4])
+    _wire(top, [(csx, DY0 + 8), (u0, DY0 + 8), (u0, pinrect["uo_out[0]"][1])], w=0.4, layer=M4)
 
-    # reset: rst_n pin -> divider RN
+    # reset: rst_n pin (M4) -> divider RN. Routed on Metal4 so it passes OVER the clock's
+    # Metal3 spine without shorting (an M3 reset route crosses the M3 clock spine).
     rn = P("RN")
     rx = pin_cx("rst_n")
-    _wire(top, [(rx, pinrect["rst_n"][1]), (rx, DY0 - 2.2), (rn[0], DY0 - 2.2), rn], w=0.4, layer=M3)
-    _via(top, rx, pinrect["rst_n"][1] - 0.2, [M3, M4])
-    _via(top, *rn, [M2, M3])
+    _wire(top, [(rx, pinrect["rst_n"][1]), (rx, DY0 - 2.2), (rn[0], DY0 - 2.2), rn], w=0.4, layer=M4)
+    _via(top, *rn, [M2, M3, M4])
 
     # outputs DIV2/DIV4/DIV8 -> uo_out[1..3]. The divider Qs are ordered left->right but the
     # pins right->left, so the nets must cross: route each on a unique-y M3 horizontal track
