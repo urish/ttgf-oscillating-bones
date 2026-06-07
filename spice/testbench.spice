@@ -1,17 +1,20 @@
-* Oscillating Bones Teshbench
+* Oscillating Bones testbench (gf180mcuD, 3.3V)
+*
+* gf180 device models + corner setup:
+.include pdk_lib.spice
 
-.include "pdk_lib.spice"
-
-* Power supply
+* Power supply (gf180 core = 3.3V) and inputs
 V1 VGND 0 0
-V2 VDPWR VGND 1.2
+V2 VDPWR VGND 3.3
 V4 clk 0 0
-V5 ena VGND 1.2
-V6 rst_n VGND 1.2
+V5 ena VGND 3.3
+* release reset shortly after start so the divider counts:
+V6 rst_n 0 PWL(0 0 12n 0 12.5n 3.3)
 
+* DUT: the magic-extracted post-layout netlist (make spice)
 .include "tt_um_oscillating_bones.spice"
 
-x1 
+x1
 + ena clk rst_n
 + VGND VGND VGND VGND VGND VGND VGND VGND
 + VGND VGND VGND VGND VGND VGND VGND VGND
@@ -21,16 +24,19 @@ x1
 + VGND VDPWR
 + tt_um_oscillating_bones
 
-.tran 50p 80n
-.option rshunt = 1.0e12
+.tran 10p 400n uic
+.option rshunt = 1.0e9
 
 .control
 run
-plot "uo_out[0]" "uo_out[1]"+2 "uo_out[2]"+4 "uo_out[3]"+6
-meas tran tdiff TRIG "uo_out[0]" VAL=1.1 RISE=2 TARG "uo_out[0]" VAL=1.1 RISE=3
+plot "uo_out[0]" "uo_out[1]"+4 "uo_out[2]"+8 "uo_out[3]"+12
+meas tran tdiff TRIG "uo_out[0]" VAL=1.65 RISE=3 TARG "uo_out[0]" VAL=1.65 RISE=4
 let freq_mhz = (1 / (tdiff) / 1e6)
 print freq_mhz
 .endc
 .end
 
-.end
+* NOTE: for the turnkey post-layout re-simulation (extracts the hardened GDS, ties the
+* std-cell wells/substrate, drives 3.3V, and reports osc_out + osc_div_2/4/8 frequencies),
+* run `make sim` (scripts/sim_ring.sh). This static testbench is the gf180 template; it needs
+* the magic-extracted DUT netlist to have its wells/substrate tied to VDPWR/VGND.

@@ -28,6 +28,11 @@ $(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) scripts/build_gf180_macro.py $(DEF)
 $(SPICE): $(TARGET_GDS)
 	magic -rcfile $(MAGIC_RC) -noconsole -dnull scripts/extract_for_sim.tcl $< $@ $(MACRO)
 
+# gf180 device models + corner setup for ngspice (used by spice/testbench.spice).
+spice/pdk_lib.spice:
+	echo ".include $(PDK_ROOT)/$(PDK)/libs.tech/ngspice/design.ngspice" > $@
+	echo ".lib $(PDK_ROOT)/$(PDK)/libs.tech/ngspice/sm141064.ngspice typical" >> $@
+
 # Post-layout simulation: extract + ngspice, report the oscillation frequency on ua[0].
 sim: $(TARGET_GDS)
 	bash scripts/sim_ring.sh

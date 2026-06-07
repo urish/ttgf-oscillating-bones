@@ -27,3 +27,4 @@ __pycache__/
 
 # lvs report
 lvs.report
+spice/pdk_lib.spice

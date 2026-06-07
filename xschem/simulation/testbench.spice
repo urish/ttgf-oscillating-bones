@@ -1,4 +1,4 @@
-** sch_path: /home/uri/p/ttihp-oscillating-bones/xschem/testbench.sch
+** sch_path: ./xschem/testbench.sch
 **.subckt testbench
 x1 osc_out osc_div_2 osc_div_4 osc_div_8 tt_um_oscillating_bones
 R21 VGND osc_out 1Meg m=1
@@ -6,11 +6,11 @@ R22 VGND osc_div_2 1Meg m=1
 R23 VGND osc_div_4 1Meg m=1
 R24 VGND osc_div_8 1Meg m=1
 V2 0 VGND 0
-V4 VDPWR VGND 1.2
+V4 VDPWR VGND 3.3
 **** begin user architecture code
 
-.lib /home/uri/p/IHP-Open-PDK/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt
-.include /home/uri/p/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/spice/sg13g2_stdcell.spice
+.include $env(PDK_ROOT)/gf180mcuD/libs.tech/ngspice/design.ngspice
+.lib $env(PDK_ROOT)/gf180mcuD/libs.tech/ngspice/sm141064.ngspice typical
 
 
 
@@ -23,19 +23,19 @@ V4 VDPWR VGND 1.2
 .control
 run
 
-meas tran tdiff TRIG osc_out VAL=1.1 RISE=2 TARG osc_out VAL=1.1 RISE=3
+meas tran tdiff TRIG osc_out VAL=1.65 RISE=2 TARG osc_out VAL=1.65 RISE=3
 let osc_freq_mhz = (1 / (tdiff) / 1e6)
 save osc_freq_mhz
 
-meas tran tdiff_div2 TRIG osc_div_2 VAL=1.1 RISE=2 TARG osc_div_2 VAL=1.1 RISE=3
+meas tran tdiff_div2 TRIG osc_div_2 VAL=1.65 RISE=2 TARG osc_div_2 VAL=1.65 RISE=3
 let osc_div_2_freq_mhz = (1 / (tdiff_div2) / 1e6)
 save osc_div_2_freq_mhz
 
-meas tran tdiff_div4 TRIG osc_div_4 VAL=1.1 RISE=2 TARG osc_div_4 VAL=1.1 RISE=3
+meas tran tdiff_div4 TRIG osc_div_4 VAL=1.65 RISE=2 TARG osc_div_4 VAL=1.65 RISE=3
 let osc_div_4_freq_mhz = (1 / (tdiff_div4) / 1e6)
 save osc_div_4_freq_mhz
 
-meas tran tdiff_div8 TRIG osc_div_8 VAL=1.1 RISE=2 TARG osc_div_8 VAL=1.1 RISE=3
+meas tran tdiff_div8 TRIG osc_div_8 VAL=1.65 RISE=2 TARG osc_div_8 VAL=1.65 RISE=3
 let osc_div_8_freq_mhz = (1 / (tdiff_div8) / 1e6)
 save osc_div_8_freq_mhz
 
@@ -47,8 +47,8 @@ write testbench.raw
 **.ends
 
 * expanding   symbol:  tt_um_oscillating_bones.sym # of pins=4
-** sym_path: /home/uri/p/ttihp-oscillating-bones/xschem/tt_um_oscillating_bones.sym
-** sch_path: /home/uri/p/ttihp-oscillating-bones/xschem/tt_um_oscillating_bones.sch
+** sym_path: ./xschem/tt_um_oscillating_bones.sym
+** sch_path: ./xschem/tt_um_oscillating_bones.sch
 .subckt tt_um_oscillating_bones uo_out[0] uo_out[1] uo_out[2] uo_out[3]
 *.opin uo_out[1]
 *.opin uo_out[0]
@@ -60,8 +60,8 @@ x1 uo_out[0] ring
 
 
 * expanding   symbol:  freq_divider.sym # of pins=6
-** sym_path: /home/uri/p/ttihp-oscillating-bones/xschem/freq_divider.sym
-** sch_path: /home/uri/p/ttihp-oscillating-bones/xschem/freq_divider.sch
+** sym_path: ./xschem/freq_divider.sym
+** sch_path: ./xschem/freq_divider.sch
 .subckt freq_divider ODIV2 ODIV4 ODIV8 IN VDD VSS
 *.ipin IN
 *.opin ODIV2
@@ -76,8 +76,8 @@ x2 ODIV8 net2 ODIV4 net2 VDD VDD VSS sg13g2_dfrbp_2
 
 
 * expanding   symbol:  ring.sym # of pins=1
-** sym_path: /home/uri/p/ttihp-oscillating-bones/xschem/ring.sym
-** sch_path: /home/uri/p/ttihp-oscillating-bones/xschem/ring.sch
+** sym_path: ./xschem/ring.sym
+** sch_path: ./xschem/ring.sch
 .subckt ring ROSC_OUT
 *.opin ROSC_OUT
 x1 net20 net1 skullfet_inverter
@@ -113,13 +113,13 @@ x21 net19 net20 skullfet_inverter
 
 
 * expanding   symbol:  skullfet_inverter.sym # of pins=2
-** sym_path: /home/uri/p/ttihp-oscillating-bones/xschem/skullfet_inverter.sym
-** sch_path: /home/uri/p/ttihp-oscillating-bones/xschem/skullfet_inverter.sch
+** sym_path: ./xschem/skullfet_inverter.sym
+** sch_path: ./xschem/skullfet_inverter.sch
 .subckt skullfet_inverter A Y
 *.ipin A
 *.opin Y
-XM1 Y A VDPWR VDPWR sg13_lv_pmos w=4.05u l=0.4u ng=1 m=1
-XM2 Y A VGND VGND sg13_lv_nmos w=4.05u l=0.4u ng=1 m=1
+XM1 Y A VDPWR VDPWR pfet_03v3 W=5.87u L=0.58u nf=1 m=1
+XM2 Y A VGND VGND nfet_03v3 W=5.87u L=0.58u nf=1 m=1
 .ends
 
 .GLOBAL VGND

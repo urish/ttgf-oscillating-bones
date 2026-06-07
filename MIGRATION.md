@@ -82,8 +82,21 @@ structural source netlist (`scripts/gen_lvs_source.py` — a 21-stage CMOS inver
 remaining top-level pin note is that **`ua[0]` and `uo_out[0]` intentionally share the `osc_out`
 net** (raw oscillation on both the analog and a digital pin). Requires `netgen` + `magic` on PATH.
 
-## Remaining finalisation ⚠️
+## SPICE / xschem (gf180)
 
-1. **xschem / spice testbench** (`xschem/`, `spice/testbench.spice`) still reference IHP device
-   symbols/models; update to gf180 (`pfet_03v3`/`nfet_03v3`, gf180 ngspice models) for the
-   schematic-level cross-check. (Post-layout extraction + simulation + netgen LVS already pass.)
+All schematic-entry and testbench files are retargeted to gf180mcuD:
+
+- `xschem/xschemrc` sources the gf180mcuD xschemrc; `xschem/skullfet_inverter.sch` uses
+  `pfet_03v3`/`nfet_03v3` (W=5.87µm L=0.58µm, matching the layout); `xschem/testbench.sch` and
+  `xschem/simulation/testbench.spice` use the gf180 ngspice models
+  (`design.ngspice` + `sm141064.ngspice typical`), a **3.3V** supply and **1.65V** measurement
+  thresholds. `spice/testbench.spice` is a gf180 testbench (3.3V, `make spice/pdk_lib.spice`
+  generates the model include).
+- **One caveat:** gf180mcuD ships **no std-cell xschem symbols**, and its DFFs have no QN output,
+  so the divider *schematic* (`xschem/freq_divider.sch`) cannot be a 1:1 port of the IHP
+  `sg13g2_dfrbp_2` toggle. The authoritative gf180 divider is the **layout** generator
+  `scripts/build_divider.py` (dffrnq_1 + inv_2 toggle stages), verified end-to-end in post-layout
+  SPICE (`make sim`) and netgen LVS (`make lvs`).
+
+The canonical re-simulation is **`make sim`** (`scripts/sim_ring.sh`): it extracts the hardened
+GDS, ties the std-cell wells/substrate, drives 3.3V, and reports osc_out + osc_div_2/4/8.

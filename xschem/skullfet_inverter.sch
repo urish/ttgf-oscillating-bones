@@ -19,19 +19,19 @@ C {devices/ipin.sym} 280 170 0 0 {name=p1 lab=A}
 C {devices/opin.sym} 410 170 0 0 {name=p2 lab=Y}
 C {devices/gnd.sym} 320 290 0 0 {name=l3 lab=VGND}
 C {devices/vdd.sym} 320 60 0 0 {name=l4 lab=VDPWR}
-C {sg13g2_pr/sg13_lv_pmos.sym} 300 120 0 0 {name=M1
-l=0.4u
-w=4.05u
-ng=1
+C {pfet_03v3.sym} 300 120 0 0 {name=M1
+L=0.58u
+W=5.87u
+nf=1
 m=1
-model=sg13_lv_pmos
+model=pfet_03v3
 spiceprefix=X
 }
-C {sg13g2_pr/sg13_lv_nmos.sym} 300 220 0 0 {name=M2
-l=0.4u
-w=4.05u
-ng=1
+C {nfet_03v3.sym} 300 220 0 0 {name=M2
+L=0.58u
+W=5.87u
+nf=1
 m=1
-model=sg13_lv_nmos
+model=nfet_03v3
 spiceprefix=X
 }

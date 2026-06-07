@@ -4,6 +4,11 @@ K {}
 V {}
 S {}
 E {}
+T {gf180 NOTE: this schematic still shows the IHP sg13g2_dfrbp_2 DFFs (which have a QN output used
+for the toggle feedback). gf180mcuD ships NO std-cell xschem symbols, and its DFFs have no QN, so
+the gf180 divider is built as dffrnq_1 + inv_2 toggle stages (D = ~Q). The authoritative gf180
+implementation is the LAYOUT generator scripts/build_divider.py (verified in post-layout SPICE,
+make sim). Rebuild this schematic with gf180 std-cell symbols to match if doing schematic LVS.} -340 -160 0 0 0.3 0.3 {}
 N -320 -30 -280 -30 {lab=IN}
 N 110 -10 110 30 {lab=#net1}
 N 320 -10 320 30 {lab=#net2}

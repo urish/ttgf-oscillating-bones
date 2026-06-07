@@ -60,8 +60,8 @@ C {devices/code.sym} 90 -220 0 0 {name=TT_MODELS
 only_toplevel=true
 format="tcleval( @value )"
 value="
-.lib $::SG13G2_MODELS/cornerMOSlv.lib mos_tt
-.include $\{PDK_ROOT\}/$\{PDK\}/libs.ref/sg13g2_stdcell/spice/sg13g2_stdcell.spice
+.include $env(PDK_ROOT)/gf180mcuD/libs.tech/ngspice/design.ngspice
+.lib $env(PDK_ROOT)/gf180mcuD/libs.tech/ngspice/sm141064.ngspice typical
 "
 spice_ignore=false}
 C {tt_um_oscillating_bones.sym} 200 -500 0 0 {name=x1}
@@ -75,19 +75,19 @@ C {devices/code.sym} 240 -220 0 0 {name=STIMULI only_toplevel=false value="
 .control
 run
 
-meas tran tdiff TRIG "osc_out" VAL=1.1 RISE=2 TARG "osc_out" VAL=1.1 RISE=3
+meas tran tdiff TRIG "osc_out" VAL=1.65 RISE=2 TARG "osc_out" VAL=1.65 RISE=3
 let osc_freq_mhz = (1 / (tdiff) / 1e6)
 save osc_freq_mhz
 
-meas tran tdiff_div2 TRIG "osc_div_2" VAL=1.1 RISE=2 TARG "osc_div_2" VAL=1.1 RISE=3
+meas tran tdiff_div2 TRIG "osc_div_2" VAL=1.65 RISE=2 TARG "osc_div_2" VAL=1.65 RISE=3
 let osc_div_2_freq_mhz = (1 / (tdiff_div2) / 1e6)
 save osc_div_2_freq_mhz
 
-meas tran tdiff_div4 TRIG "osc_div_4" VAL=1.1 RISE=2 TARG "osc_div_4" VAL=1.1 RISE=3
+meas tran tdiff_div4 TRIG "osc_div_4" VAL=1.65 RISE=2 TARG "osc_div_4" VAL=1.65 RISE=3
 let osc_div_4_freq_mhz = (1 / (tdiff_div4) / 1e6)
 save osc_div_4_freq_mhz
 
-meas tran tdiff_div8 TRIG "osc_div_8" VAL=1.1 RISE=2 TARG "osc_div_8" VAL=1.1 RISE=3
+meas tran tdiff_div8 TRIG "osc_div_8" VAL=1.65 RISE=2 TARG "osc_div_8" VAL=1.65 RISE=3
 let osc_div_8_freq_mhz = (1 / (tdiff_div8) / 1e6)
 save osc_div_8_freq_mhz
 
@@ -129,4 +129,4 @@ C {devices/vsource.sym} 490 -330 0 0 {name=V2 value=0}
 C {devices/gnd.sym} 490 -300 0 0 {name=l2 lab=VGND}
 C {lab_pin.sym} 490 -360 0 0 {name=p5 sig_type=std_logic lab=0}
 C {devices/vdd.sym} 370 -360 0 0 {name=l8 lab=VDPWR}
-C {devices/vsource.sym} 370 -330 0 0 {name=V4 value=1.2}
+C {devices/vsource.sym} 370 -330 0 0 {name=V4 value=3.3}
