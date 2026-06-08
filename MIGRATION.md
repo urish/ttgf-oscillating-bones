@@ -20,8 +20,13 @@ stack, device implants and feature sizes are retargeted to gf180mcuD in a pure-P
   extract the FETs as **6V medium-voltage** devices (gate ≥ 0.55/0.70 µm), which would force a
   ~2.5× blow-up that no longer fits the die. As plain **3.3V devices** (nfet_03v3/pfet_03v3, no
   Dualgate) the gate minimum is 0.28 µm — matching the 3.3V core supply.
-- **Implant regeneration**: Pplus = COMP ∩ Nwell (+0.16 µm), Nplus = COMP − Nwell (+0.16 µm),
-  LVPWELL over the NMOS region; Nwell grown +0.30 µm for the DF.7 p-diff overlap rule.
+- **Implant regeneration follows the original p-select (pSD), not Nwell membership**: Pplus =
+  COMP ∩ pSD (+0.16 µm), Nplus = COMP − pSD (+0.16 µm), LVPWELL over the NMOS (n+ COMP *outside*
+  the Nwell); Nwell grown +0.30 µm for DF.7. This polarity choice matters: the bare n+ COMP inside
+  each Nwell are the **n-well taps** that tie the pfet bodies to VDPWR. An earlier version keyed
+  the implants off Nwell membership (p+ for all COMP in the Nwell), which buried those taps under
+  Pplus and left all 21 pfet bodies floating — the design still oscillated (junction-biased), but
+  the bodies weren't tied. Honoring pSD restores the taps (every pfet body extracts to VDPWR).
 - **1.45× uniform scale** — the minimum that clears every 180nm width/spacing/cut rule.
 
 Result: the full skull ring (21 inverters + central skull + power rings) remaps to a
@@ -39,12 +44,12 @@ die outline, and the skull ring placed in the centre. Emits the matching LEF (co
 - **Magic DRC: 0 violations** (full macro).
 - **Post-layout SPICE oscillates and divides.** Extracting the hardened GDS with magic and
   simulating with the gf180mcuD ngspice models (`make sim`), the 21-stage ring oscillates
-  **rail-to-rail at ~139 MHz**, and the std-cell ripple divider produces clean **/2, /4, /8** taps:
-  `uo_out[0]=osc_out` ~139 MHz, `uo_out[1..3]=osc_div_2/4/8` ~70/35/17 MHz, plus the raw 3.3V
+  **rail-to-rail at ~119 MHz**, and the std-cell ripple divider produces clean **/2, /4, /8** taps:
+  `uo_out[0]=osc_out` ~119 MHz, `uo_out[1..3]=osc_div_2/4/8` ~59/30/15 MHz, plus the raw 3.3V
   oscillation on `ua[0]`. The testbench supplies **only VDPWR/VGND and the substrate bias** — it
-  does **not** force any std-cell rail or device well, so the simulated behaviour reflects the
-  actual extracted power connectivity (the divider's std-cell rails are genuinely strapped to
-  VDPWR/VGND in the layout — see the divider section).
+  does **not** force any std-cell rail or device well, so the behaviour reflects the *actual*
+  extracted connectivity: every pfet body ties to VDPWR through its n-well tap, every std-cell rail
+  is strapped to VDPWR/VGND, and the extraction shows **no floating well/rail nets**.
 - **TT precheck structural checks pass** (run locally against `tt-support-tools/precheck`):
   KLayout Checks, Boundary check, Layer check, Cell name check, Power pin check, Analog pin check,
   Pin check.
@@ -78,28 +83,27 @@ filltie columns (one to each die-edge power stripe). **Note the easy mistake her
 far end must use the *die* width (`2*cx`), not the local divider width — an early version computed
 `VDPWR_X` from the divider width and the VDD strap stopped in empty space, leaving every std-cell
 rail floating (the divider still "worked" in sim only because the testbench was force-tying the
-rails; that force-tie has since been removed, which is how the bug surfaced).
+rails; removing that force-tie is how the bug surfaced).
 
-Post-layout SPICE confirms **/2, /4, /8** (≈70 / 35 / 17 MHz from the ≈139 MHz ring).
+Post-layout SPICE confirms **/2, /4, /8** (≈59 / 30 / 15 MHz from the ≈119 MHz ring).
 
-## LVS (`make lvs`) — partial
+## LVS (`make lvs`)
 
 `scripts/run_lvs.sh` extracts the layout with magic and runs **netgen** against an intended
-structural source netlist (`scripts/gen_lvs_source.py`). netgen confirms the **device classes /
-counts match** (`nfet_03v3 (21)`, `pfet_03v3 (21)`, 3× `dffrnq_1`, 3× `inv_2`), but it does **not**
-report a clean top-level match: the std cells are compared as black boxes and the simplified source
-model does not reproduce the extracted net topology exactly (net-count mismatch + a pin-matching
-note that includes `ua[0]`/`uo_out[0]` sharing the `osc_out` net). So treat LVS as a
-**device-level cross-check, not a signed-off full LVS** — the authoritative functional verification
-is the (now un-forced) post-layout simulation. A clean full LVS would need the std-cell subckts
-flattened on both sides and a faithful source netlist; the floating skull-inverter n-wells (below)
-also show up as extra nets.
+structural source netlist (`scripts/gen_lvs_source.py`). netgen reports matching **device counts
+(48 = 48)** and matching **net counts (240 = 240)**, and the device classes are equivalent
+(`nfet_03v3 (21)`, `pfet_03v3 (21)`, 3× `dffrnq_1`, 3× `inv_2`). The residual "top-level pin
+matching" note is netgen reconciling the **black-boxed std-cell pins** against the flattened layout
+plus the intentional **`ua[0]`/`uo_out[0]` sharing the `osc_out` net** — not a connectivity error.
+Treat this as a strong **device- and net-count cross-check**; a fully signed-off LVS would flatten
+the std-cell subckts on both sides. The authoritative functional check is the un-forced post-layout
+simulation.
 
-**Skull-inverter n-wells float.** The hand-drawn skull inverters have no explicit n-well tap, so
-each pfet body extracts as its own `w_*` net (junction-biased on silicon). The ring oscillates fine
-this way (it is why the honest frequency, ~139 MHz, is a bit higher than a hard-tied-well estimate),
-but for a robust tape-out the n-wells should be strapped to VDPWR — a layout change to the skull art
-that is left as a follow-up.
+**Well/body connectivity — verified, nothing floats.** Every pfet body ties to VDPWR through the
+skull inverter's n-well tap (preserved by the pSD-based implant regeneration above), the nfet
+bodies tie to VGND, and the std-cell rails are strapped to VDPWR/VGND. The extraction contains **no
+floating `w_*` well nets**, which is also why removing the simulation force-tie left the frequency
+essentially unchanged (~119 MHz).
 
 ## SPICE / xschem (gf180)
 

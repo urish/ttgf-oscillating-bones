@@ -69,24 +69,38 @@ def _polys(shapes, layer, datatype):
     return [gdstk.Polygon(p.points, layer=layer, datatype=datatype) for p in shapes]
 
 
-def regen_implants(comp_shapes, nwell_shapes):
-    """Build Pplus/Nplus/LVPWELL/grown-Nwell from COMP and the (PMOS) Nwell region."""
+def regen_implants(comp_shapes, nwell_shapes, psd_shapes):
+    """Build Pplus/Nplus/LVPWELL/grown-Nwell from COMP, the Nwell region and the original
+    p-select (pSD).
+
+    Implant polarity follows the *original pSD*, not Nwell membership: p+ where pSD was drawn,
+    n+ everywhere else.  This is essential — the bare n+ COMP inside the Nwell are the **n-well
+    taps** that tie each pfet body to VDPWR.  Assigning implants by Nwell membership (p+ for all
+    COMP in Nwell) would bury those taps under Pplus and leave the wells floating.
+    """
     comp = gdstk.boolean(comp_shapes, [], "or")
     nwell = gdstk.boolean(nwell_shapes, [], "or") if nwell_shapes else []
-    pcomp = gdstk.boolean(comp, nwell, "and") if nwell else []
-    ncomp = gdstk.boolean(comp, nwell, "not") if nwell else comp
+    psd = gdstk.boolean(psd_shapes, [], "or") if psd_shapes else []
+    if psd:
+        pcomp = gdstk.boolean(comp, psd, "and")
+        ncomp = gdstk.boolean(comp, psd, "not")
+    elif nwell:                                  # fallback: old Nwell-membership rule
+        pcomp = gdstk.boolean(comp, nwell, "and")
+        ncomp = gdstk.boolean(comp, nwell, "not")
+    else:
+        pcomp, ncomp = [], comp
+    # LVPWELL belongs only under the NMOS (n+ COMP OUTSIDE the Nwell); the n+ n-well taps,
+    # which sit inside the Nwell, must NOT get LVPWELL.
+    nmos = gdstk.boolean(ncomp, nwell, "not") if (ncomp and nwell) else ncomp
     out = []
-    if pcomp:
-        for p in gdstk.offset(pcomp, IMPLANT_ENC, join="miter"):
-            out.append(gdstk.Polygon(p.points, layer=PPLUS[0], datatype=PPLUS[1]))
-    if ncomp:
-        for p in gdstk.offset(ncomp, IMPLANT_ENC, join="miter"):
-            out.append(gdstk.Polygon(p.points, layer=NPLUS[0], datatype=NPLUS[1]))
-        for p in gdstk.offset(ncomp, 0.45, join="miter"):
-            out.append(gdstk.Polygon(p.points, layer=LVPWELL[0], datatype=LVPWELL[1]))
-    if nwell:
-        for p in gdstk.offset(nwell, NWELL_GROW, join="miter"):
-            out.append(gdstk.Polygon(p.points, layer=NWELL[0], datatype=NWELL[1]))
+    for p in gdstk.offset(pcomp, IMPLANT_ENC, join="miter") if pcomp else []:
+        out.append(gdstk.Polygon(p.points, layer=PPLUS[0], datatype=PPLUS[1]))
+    for p in gdstk.offset(ncomp, IMPLANT_ENC, join="miter") if ncomp else []:
+        out.append(gdstk.Polygon(p.points, layer=NPLUS[0], datatype=NPLUS[1]))
+    for p in gdstk.offset(nmos, 0.45, join="miter") if nmos else []:
+        out.append(gdstk.Polygon(p.points, layer=LVPWELL[0], datatype=LVPWELL[1]))
+    for p in gdstk.offset(nwell, NWELL_GROW, join="miter") if nwell else []:
+        out.append(gdstk.Polygon(p.points, layer=NWELL[0], datatype=NWELL[1]))
     return out
 
 
@@ -96,13 +110,15 @@ def remap_flat(in_gds, top_name, scale=SCALE):
     cell = {c.name: c for c in lib.cells}[top_name]
     flat = cell.copy("_flat", deep_copy=True).flatten()
 
-    comp_src, nwell_src, kept = [], [], []
+    comp_src, nwell_src, psd_src, kept = [], [], [], []
     for p in flat.get_polygons():
         k = (p.layer, p.datatype)
         if k == (1, 0):
             comp_src.append(p)
         elif k == (31, 0):
             nwell_src.append(p)
+        elif k == (14, 0):              # IHP pSD (p-select) — drives implant polarity, not mapped
+            psd_src.append(p)
         if k in DROP:
             continue
         tgt = LMAP.get(k)
@@ -110,7 +126,7 @@ def remap_flat(in_gds, top_name, scale=SCALE):
             continue  # unmapped -> drop
         kept.append(gdstk.Polygon(p.points, layer=tgt[0], datatype=tgt[1]))
 
-    implants = regen_implants(comp_src, nwell_src)
+    implants = regen_implants(comp_src, nwell_src, psd_src)
 
     out = gdstk.Library()
     nc = out.new_cell(top_name)
