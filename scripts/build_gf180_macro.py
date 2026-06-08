@@ -129,8 +129,9 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     def mvia(x, y):
         _via(top, x, y, [M3, M4])
 
-    VGND_X, VDPWR_X = 5.0, W - 5.0
-    rail_vss, rail_vdd = DY0, DY0 + 3.9
+    VGND_X, VDPWR_X = 5.0, 2 * cx - 5.0      # die-width based (W above is the DIVIDER width!)
+    rail_vss, rail_vdd = DY0, DY0 + 3.9      # rail_vdd: high in the cell VDD rail (y 2.53..4.22),
+                                             # clear of the DIV2/4/8 output via M3 pads at y=303
     t_vss, t_vdd, t_div2, t_div4, t_div8, t_rn, t_clk, t_uo0 = (
         DY0, DY0 + 4.5, DY0 + 7, DY0 + 9, DY0 + 11, DY0 + 13, DY0 + 15.5, DY0 + 18)
 

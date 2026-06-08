@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# Post-layout simulation of the SkullFET ring oscillator.
+# Post-layout simulation of the SkullFET ring oscillator + /2/4/8 divider.
 #   - extracts gds/tt_um_oscillating_bones.gds with magic (device-level netlist)
-#   - ties the n-wells to VDPWR and the substrate to VGND
 #   - drives VDPWR=3.3V, VGND=0 and runs a transient with ngspice + gf180mcuD models
-#   - reports the oscillation frequency seen on the ua[0] (osc_out_3v3) pin
+#   - reports osc_out + osc_div_2/4/8 on uo_out[0..3]
+#
+# Power connectivity is taken AS EXTRACTED — the testbench only supplies VDPWR/VGND and biases
+# the global substrate node; it deliberately does NOT force the std-cell rails or device wells,
+# so a missing power route shows up as a broken sim (not silently patched). The std cells get
+# VDPWR/VGND from the macro's power straps; the skull-inverter pfet n-wells have no explicit tap
+# and float (junction-biased), which is why the honest ring frequency (~139 MHz) is a little
+# higher than a hard-tied-well estimate.
 #
 # Requires: PDK_ROOT pointing at a gf180mcuD install, and `magic` + `ngspice` on PATH.
 set -e
@@ -16,10 +22,11 @@ OUT="$(mktemp -d)"
 magic -dnull -noconsole -rcfile "$RC" "$ROOT/scripts/extract_sim.tcl" \
     "$ROOT/gds/tt_um_oscillating_bones.gds" "$OUT/macro.spice" tt_um_oscillating_bones >/dev/null
 
-# flatten the subckt, tie wells/substrate/std-cell power, sanitise net names for ngspice
+# flatten the subckt and sanitise net names for ngspice. The ONLY net forced here is the global
+# substrate (VSUBS -> VGND, the normal substrate bias); std-cell rails and device wells are left
+# exactly as extracted so a missing power connection is not masked.
 grep -vE '^\.subckt|^\.ends' "$OUT/macro.spice" \
-  | sed -E 's/[A-Za-z0-9_./]+\.(VNW|VDD|VDPWR)\b/VDPWR/g; s/[A-Za-z0-9_./]+\.(VPW|VSS|VGND)\b/VGND/g;
-            s/w_[a-z0-9_]+#?/VDPWR/g; s/\bVSUBS\b/VGND/g; s/#//g; s/\[([0-9]+)\]/_\1/g' \
+  | sed -E 's/\bVSUBS\b/VGND/g; s/#//g; s/\[([0-9]+)\]/_\1/g' \
   > "$OUT/flat.spice"
 
 # an internal inter-stage node to kick the oscillator out of its metastable point

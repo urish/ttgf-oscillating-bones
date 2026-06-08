@@ -39,10 +39,12 @@ die outline, and the skull ring placed in the centre. Emits the matching LEF (co
 - **Magic DRC: 0 violations** (full macro).
 - **Post-layout SPICE oscillates and divides.** Extracting the hardened GDS with magic and
   simulating with the gf180mcuD ngspice models (`make sim`), the 21-stage ring oscillates
-  **rail-to-rail at ~119 MHz**, and the std-cell ripple divider produces clean **/2, /4, /8** taps:
-  `uo_out[0]=osc_out` ~119 MHz, `uo_out[1..3]=osc_div_2/4/8` ~59/30/15 MHz, plus the raw 3.3V
-  oscillation on `ua[0]`. The extracted netlist is a clean closed 21-stage CMOS ring with VGND/VDPWR
-  as separate supplies and properly-tied std-cell wells.
+  **rail-to-rail at ~139 MHz**, and the std-cell ripple divider produces clean **/2, /4, /8** taps:
+  `uo_out[0]=osc_out` ~139 MHz, `uo_out[1..3]=osc_div_2/4/8` ~70/35/17 MHz, plus the raw 3.3V
+  oscillation on `ua[0]`. The testbench supplies **only VDPWR/VGND and the substrate bias** — it
+  does **not** force any std-cell rail or device well, so the simulated behaviour reflects the
+  actual extracted power connectivity (the divider's std-cell rails are genuinely strapped to
+  VDPWR/VGND in the layout — see the divider section).
 - **TT precheck structural checks pass** (run locally against `tt-support-tools/precheck`):
   KLayout Checks, Boundary check, Layer check, Cell name check, Power pin check, Analog pin check,
   Pin check.
@@ -71,16 +73,33 @@ strip and connected by a small **channel router** (in `add_divider`): Metal3 = h
 the clock enters from the bottom (tapped off the `ua[0]`/OSC node *outside* the ring) and takes one
 Metal3 dip under the VGND supply connector. `uo_out[0]=osc_out`, `uo_out[1..3]=osc_div_2/4/8`.
 
-Post-layout SPICE confirms **/2, /4, /8** (≈59 / 30 / 15 MHz from the ≈119 MHz ring).
+The divider's VDD/VSS rails are strapped to VDPWR/VGND with two short Metal3 straps tapped on
+filltie columns (one to each die-edge power stripe). **Note the easy mistake here:** the strap's
+far end must use the *die* width (`2*cx`), not the local divider width — an early version computed
+`VDPWR_X` from the divider width and the VDD strap stopped in empty space, leaving every std-cell
+rail floating (the divider still "worked" in sim only because the testbench was force-tying the
+rails; that force-tie has since been removed, which is how the bug surfaced).
 
-## LVS (`make lvs`)
+Post-layout SPICE confirms **/2, /4, /8** (≈70 / 35 / 17 MHz from the ≈139 MHz ring).
+
+## LVS (`make lvs`) — partial
 
 `scripts/run_lvs.sh` extracts the layout with magic and runs **netgen** against an intended
-structural source netlist (`scripts/gen_lvs_source.py` — a 21-stage CMOS inverter ring +
-`dffrnq_1`/`inv_2` divider). netgen reports **all device classes equivalent**: `nfet_03v3 (21)`,
-`pfet_03v3 (21)`, the 3 DFFs and 3 inverters all match between layout and source. The one
-remaining top-level pin note is that **`ua[0]` and `uo_out[0]` intentionally share the `osc_out`
-net** (raw oscillation on both the analog and a digital pin). Requires `netgen` + `magic` on PATH.
+structural source netlist (`scripts/gen_lvs_source.py`). netgen confirms the **device classes /
+counts match** (`nfet_03v3 (21)`, `pfet_03v3 (21)`, 3× `dffrnq_1`, 3× `inv_2`), but it does **not**
+report a clean top-level match: the std cells are compared as black boxes and the simplified source
+model does not reproduce the extracted net topology exactly (net-count mismatch + a pin-matching
+note that includes `ua[0]`/`uo_out[0]` sharing the `osc_out` net). So treat LVS as a
+**device-level cross-check, not a signed-off full LVS** — the authoritative functional verification
+is the (now un-forced) post-layout simulation. A clean full LVS would need the std-cell subckts
+flattened on both sides and a faithful source netlist; the floating skull-inverter n-wells (below)
+also show up as extra nets.
+
+**Skull-inverter n-wells float.** The hand-drawn skull inverters have no explicit n-well tap, so
+each pfet body extracts as its own `w_*` net (junction-biased on silicon). The ring oscillates fine
+this way (it is why the honest frequency, ~139 MHz, is a bit higher than a hard-tied-well estimate),
+but for a robust tape-out the n-wells should be strapped to VDPWR — a layout change to the skull art
+that is left as a follow-up.
 
 ## SPICE / xschem (gf180)
 
