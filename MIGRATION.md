@@ -60,8 +60,13 @@ Two key fixes were needed to get the post-layout netlist to oscillate: (a) the i
 carried decorative power-ring stubs on the upper metals that, after the 7→4 metal collapse, shorted
 each inverter's VGND to VDPWR — these are dropped in the remap; (b) the per-inverter A/Y pin labels
 must NOT be carried into the flattened ring (they would merge all inputs/outputs); inter-stage
-connectivity is geometric. The macro's two power stripes sit on opposite die edges so their Metal4
-connectors don't cross the other stripe.
+connectivity is geometric. Both power stripes sit on the **left** die edge (VGND leftmost, VDPWR
+just inside it), matching the original IHP arrangement so the TT power grid — which enters from the
+left — connects without strips reaching across the skull. They run ~97% of the die height. The two
+supply connectors land on left-side ring pads at well-separated angles (different y); the VGND
+connector hops the VDPWR stripe on a short Metal3 dip (outside the ring, clear of the Metal3 rings),
+and the divider's clock riser dips to Metal3 across both connectors. Verified after the move: VGND
+and VDPWR remain separate nets, every ring pfet body + std-cell rail stays tied, nothing floats.
 
 The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and run
 in CI; magic DRC runs clean locally.

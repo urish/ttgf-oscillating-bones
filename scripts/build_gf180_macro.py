@@ -29,8 +29,13 @@ VIA3, VIA2, VIA1 = (40, 0), (38, 0), (35, 0)
 PR_BNDRY = (0, 0)   # gf180mcuD "PR_bndry" — required by precheck, must enclose the macro
 U = 2000.0  # DEF database units per micron
 
-# Power stripe geometry
+# Power stripe geometry. Both stripes sit on the LEFT edge (VGND leftmost, VDPWR just inside it),
+# matching the original IHP arrangement: the TT power grid enters from the left, so keeping both
+# rails there means the connector strips don't reach across the skull. Stripes run y=5..H-5
+# (~97% of die height, > the 90% the analog power pins must span).
 STRIPE_W = 4.0          # um (>= 0.8 min); generous for low-resistance power
+VGND_SX = 3.0           # VGND stripe left-x (leftmost die edge)
+VDPWR_SX = 10.0         # VDPWR stripe left-x (next to VGND)
 VIA_SZ = 0.26           # via cut size (gf180 Via2/Via3 ~0.26-0.28)
 
 
@@ -129,7 +134,7 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     def mvia(x, y):
         _via(top, x, y, [M3, M4])
 
-    VGND_X, VDPWR_X = 5.0, 2 * cx - 5.0      # die-width based (W above is the DIVIDER width!)
+    VGND_X, VDPWR_X = VGND_SX + STRIPE_W / 2, VDPWR_SX + STRIPE_W / 2   # both stripes on the left
     rail_vss, rail_vdd = DY0, DY0 + 3.9      # rail_vdd: high in the cell VDD rail (y 2.53..4.22),
                                              # clear of the DIV2/4/8 output via M3 pads at y=303
     t_vss, t_vdd, t_div2, t_div4, t_div8, t_rn, t_clk, t_uo0 = (
@@ -151,9 +156,10 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     tapx = (ua0r[0] + ua0r[2]) / 2
     csx = 20.0
     _wire(top, [(tapx, 0.5), (tapx, 22.0), (csx, 22.0)], w=0.4, layer=M4)   # bottom, below ring
-    _wire(top, [(csx, 22.0), (csx, 148.0)], w=0.4, layer=M4)
-    mvia(csx, 148.0); _wire(top, [(csx, 148.0), (csx, 162.0)], w=0.4, layer=M3)  # dip under VGND connector
-    mvia(csx, 162.0); _wire(top, [(csx, 162.0), (csx, t_clk)], w=0.4, layer=M4)
+    _wire(top, [(csx, 22.0), (csx, 134.0)], w=0.4, layer=M4)
+    # dip to M3 across BOTH left-edge supply connectors (VDPWR ~138, VGND ~187)
+    mvia(csx, 134.0); _wire(top, [(csx, 134.0), (csx, 192.0)], w=0.4, layer=M3)
+    mvia(csx, 192.0); _wire(top, [(csx, 192.0), (csx, t_clk)], w=0.4, layer=M4)
     mvia(csx, t_clk); _wire(top, [(csx, t_clk), (97.0, t_clk)], w=0.4, layer=M3)  # across to CLK column
     ck = P("CLK")
     mvia(97.0, t_clk); _wire(top, [(97.0, t_clk), (97.0, ck[1])], w=0.4, layer=M4)
@@ -218,10 +224,12 @@ def build(ring_gds, def_path, out_gds):
         cands.sort()
         return cands[0][1], cands[0][2]
 
-    # VGND stripe on the LEFT edge -> a VGND pad on the left side (angle ~180).
-    # VDPWR stripe on the RIGHT edge -> a VDPWR pad on the right side (angle ~0).
-    # Opposite sides so neither horizontal Metal4 connector crosses the other vertical stripe.
-    supply = {"VGND": (3.0 + STRIPE_W / 2, 180.0), "VDPWR": (W - 3.0 - STRIPE_W / 2, 0.0)}
+    # Both stripes on the LEFT edge: VGND leftmost, VDPWR just inside it (IHP arrangement). The
+    # supply pads are picked on the left side at well-separated angles so their connectors sit at
+    # different y. Each connector runs Metal4 OVER the Metal3 power rings to its pad; the VGND
+    # connector also has to hop the VDPWR stripe, so it dips to Metal3 across it (outside the ring,
+    # where there are no Metal3 rings to short against).
+    supply = {"VGND": (VGND_SX + STRIPE_W / 2, 168.0), "VDPWR": (VDPWR_SX + STRIPE_W / 2, 192.0)}
     pad_pos = {}
     for name, (x, ang) in supply.items():
         x1, x2 = x - STRIPE_W / 2, x + STRIPE_W / 2
@@ -230,8 +238,15 @@ def build(ring_gds, def_path, out_gds):
         top.add(gdstk.Label(name, (x, cy), layer=M4PIN[0], texttype=M4PIN[1]))
         px, py = supply_pad(name, ang)
         pad_pos[name] = (px, py)
-        xa, xb = sorted((x1 if ang > 90 else x2, px))
-        top.add(gdstk.rectangle((xa, py - 0.6), (xb, py + 0.6), layer=M4[0], datatype=M4[1]))
+        if name == "VGND":
+            d0, d1 = VDPWR_SX - 1.0, VDPWR_SX + STRIPE_W + 1.0   # hop the VDPWR stripe on Metal3
+            top.add(gdstk.rectangle((x2, py - 0.6), (d0, py + 0.6), layer=M4[0], datatype=M4[1]))
+            via_m4_m3(top, d0, py)
+            top.add(gdstk.rectangle((d0, py - 0.6), (d1, py + 0.6), layer=M3[0], datatype=M3[1]))
+            via_m4_m3(top, d1, py)
+            top.add(gdstk.rectangle((d1, py - 0.6), (px, py + 0.6), layer=M4[0], datatype=M4[1]))
+        else:
+            top.add(gdstk.rectangle((x2, py - 0.6), (px, py + 0.6), layer=M4[0], datatype=M4[1]))
         via_m4_m3(top, px, py)
 
     # --- analog output ua[0] = osc_out_3v3: tap the live OSC node (a ring inter-stage output
@@ -261,8 +276,8 @@ def build(ring_gds, def_path, out_gds):
     # --- write the matching LEF (precheck wants correct SIZE + USE POWER/GROUND) ---
     lef_path = out_gds.replace("gds/", "lef/").replace(".gds", ".lef")
     write_lef(lef_path, W, H, pins,
-              vdpwr=(W - 3.0 - STRIPE_W, 5.0, W - 3.0, H - 5.0),
-              vgnd=(3.0, 5.0, 3.0 + STRIPE_W, H - 5.0))
+              vdpwr=(VDPWR_SX, 5.0, VDPWR_SX + STRIPE_W, H - 5.0),
+              vgnd=(VGND_SX, 5.0, VGND_SX + STRIPE_W, H - 5.0))
     print(f"wrote {lef_path}")
 
 

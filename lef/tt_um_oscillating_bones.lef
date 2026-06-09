@@ -420,7 +420,7 @@ MACRO tt_um_oscillating_bones
     USE POWER ;
     PORT
       LAYER Metal4 ;
-        RECT 339.640 5.000 343.640 320.360 ;
+        RECT 10.000 5.000 14.000 320.360 ;
     END
   END VDPWR
   PIN VGND
