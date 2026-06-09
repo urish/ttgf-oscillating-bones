@@ -2,7 +2,9 @@
 # Author: Uri Shaked
 
 MACRO := tt_um_oscillating_bones
-SOURCE_GDS := gds/$(MACRO).source.gds
+# The committed gf180 skull-ring artwork. It was produced one-time by remapping the original IHP
+# sg13g2 layout (see `make remap` + MIGRATION.md); the IHP source GDS has been removed now that the
+# migration is complete, so ring_gf180.gds is the canonical source the build starts from.
 RING_GDS   := gds/ring_gf180.gds
 TARGET_GDS := gds/$(MACRO).gds
 TARGET_LEF := lef/$(MACRO).lef
@@ -16,13 +18,18 @@ DRC_DECK := $(PDK_ROOT)/$(PDK)/libs.tech/klayout/tech/drc/gf180mcu.drc
 all: $(TARGET_GDS) $(TARGET_LEF)
 .PHONY: all
 
-# 1) Remap the IHP SkullFET ring artwork to gf180mcuD layers (3.3V devices, 1.45x scale).
-$(RING_GDS): $(SOURCE_GDS) scripts/remap_to_gf180.py
-	python3 scripts/remap_to_gf180.py $< $@ ring 1.45
-
-# 2) Assemble the full macro (GDS + LEF): DEF frame + pins + power stripes + placed ring.
-$(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) scripts/build_gf180_macro.py $(DEF)
+# Assemble the full macro (GDS + LEF) from the committed gf180 ring: DEF frame + pins + power
+# stripes + placed ring + std-cell /2/4/8 divider.
+$(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) scripts/build_gf180_macro.py scripts/build_divider.py $(DEF)
 	python3 scripts/build_gf180_macro.py $(RING_GDS) $(DEF) $(TARGET_GDS)
+
+# One-time IHP->gf180 migration that produced $(RING_GDS) (3.3V devices, 1.45x scale, implants/
+# n-well taps regenerated from the original p-select). The IHP source GDS is no longer in the repo;
+# supply one to regenerate the ring:  make remap IHP_SRC=path/to/ihp_source.gds
+remap:
+	@test -n "$(IHP_SRC)" || { echo "set IHP_SRC=path/to/ihp_source.gds"; exit 1; }
+	python3 scripts/remap_to_gf180.py $(IHP_SRC) $(RING_GDS) ring 1.45
+.PHONY: remap
 
 # Extract a SPICE netlist for simulation/LVS.
 $(SPICE): $(TARGET_GDS)
@@ -56,5 +63,5 @@ drc_klayout: $(TARGET_GDS)
 .PHONY: drc_klayout
 
 clean:
-	rm -f $(TARGET_GDS) $(RING_GDS) $(SPICE)
+	rm -f $(TARGET_GDS) $(SPICE)    # NOT $(RING_GDS) — it is committed source artwork now
 .PHONY: clean

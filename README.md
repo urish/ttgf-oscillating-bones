@@ -9,20 +9,24 @@ A stylish ring oscillator built from skull-shaped **SkullFET** transistors — t
 
 ## Building the layout
 
-The hand-drawn SkullFET artwork is migrated from IHP sg13g2 to gf180mcuD by a pure-Python
-pipeline (no interactive layout needed):
+The gf180 skull ring (`gds/ring_gf180.gds`) is committed as the source artwork; the full macro is
+assembled from it by a pure-Python pipeline (no interactive layout needed):
 
 ```
-make all      # remap the skull ring to gf180 layers + assemble the macro (GDS + LEF)
+make all      # assemble the macro (GDS + LEF) from gds/ring_gf180.gds
 make drc      # magic sign-off DRC (0 violations)
+make sim      # post-layout ngspice: ring + /2 /4 /8 divider
+make lvs      # netgen device/net cross-check
 ```
 
-- `scripts/remap_to_gf180.py` — remaps the IHP SkullFET ring to gf180mcuD layers, regenerates
-  the well/implant layers as 3.3V devices (no Dualgate), and scales 1.45× to clear 180nm rules.
 - `scripts/build_gf180_macro.py` — assembles the full `tt_um_oscillating_bones` macro from the
-  TT analog DEF frame (pins + power stripes) with the skull ring placed in the centre, and emits
-  the matching LEF.
+  TT analog DEF frame (pins + power stripes) with the skull ring placed in the centre and a gf180
+  std-cell /2/4/8 divider (`scripts/build_divider.py`), and emits the matching LEF.
 - `scripts/render_layout.py` — renders the GDS to a PNG.
+- `scripts/remap_to_gf180.py` — the one-time IHP sg13g2 → gf180mcuD migration that produced
+  `ring_gf180.gds` (3.3V devices, implants/n-well taps regenerated from the original p-select,
+  1.45× scale). The IHP source GDS has been removed post-migration; to re-run it against a fresh
+  IHP source: `make remap IHP_SRC=path/to/ihp_source.gds`.
 
 Requires `PDK_ROOT` pointing at a gf180mcuD install and `magic` on `PATH`.
 
