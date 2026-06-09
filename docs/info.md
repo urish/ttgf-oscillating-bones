@@ -37,11 +37,20 @@ substrate bias — it does **not** force any std-cell rail or device well, so th
 actual extracted connectivity (every pfet body is tied to VDPWR through its n-well tap, every
 std-cell rail is strapped to VDPWR/VGND — nothing floats).
 
+## Reset
+
+`rst_n` (active-low) resets **only the divider** — it asynchronously clears the three flip-flops,
+so while `rst_n` is held low the divided taps `uo_out[1..3]` (÷2/÷4/÷8) sit at 0. The 21-stage ring
+oscillator has no reset and free-runs whenever the design is powered, so `osc_out` / `ua[0]` keep
+oscillating at full speed even during reset. Release `rst_n` (high) and the divider starts counting
+from a known phase. `clk` and `ena` are not used — the ring self-clocks the divider.
+
 ## How to test
 
 Connect an oscilloscope to **`osc_div_8` / `uo_out[3]`** (~15 MHz, scope-friendly) and enjoy the
 show. The faster taps (`osc_out`, `osc_div_2`) exceed typical GPIO bandwidth — observe the raw
-oscillation on the analog pin **`ua[0]`** instead.
+oscillation on the analog pin **`ua[0]`** instead. Note that `uo_out[1..3]` stay at 0 until you
+release `rst_n`.
 
 ## External hardware
 
