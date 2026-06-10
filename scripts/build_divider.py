@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """
-Build a /2 /4 /8 ripple frequency divider from gf180mcu_fd_sc_mcu7t5v0 standard cells.
+Build an N-stage ripple frequency divider from gf180mcu_fd_sc_mcu7t5v0 standard cells
+(default N=8 -> /2 /4 /8 ... /256).
 
 gf180 DFFs have no QN output, so each divide-by-2 stage is a DFF (dffrnq_1: CLK, D, RN, Q)
-plus an inverter (inv_2: I, ZN) wired as a toggle flip-flop (D = ~Q).  Three stages sit in an
+plus an inverter (inv_2: I, ZN) wired as a toggle flip-flop (D = ~Q).  The stages sit in one
 abutted row; Q of each stage clocks the next and is also a divider output.
 
-Power/wells: the cells are abutted into a continuous row with **filltie** cells between every
-cell and **endcap** cells at the ends.  filltie/endcap tie Nwell->VDD and Pwell->VSS internally
-(the std cells themselves expose VNW/VPW only as well layers, so without these taps the wells
-float and the cells don't work).  The whole row shares one VDD rail (top) and one VSS rail
-(bottom); the macro connects those once.
+Cell order is left->right = stage 0 (/2) .. stage N-1 (/2^N).  The DFF's Q sits on the right of
+the cell and CLK on the left, so the ripple chain (Q -> next CLK) is a short hop to the cell on
+the right -- i.e. the clock flows left->right and the clock enters at the LEFT end.  The macro
+then maps each stage's output to the uo_out pin at the matching left->right position, so the
+output routes fan to the pins WITHOUT crossing (see add_divider).
 
-Pins are Metal1; we via up to Metal2 and route in channels above/below the row.
+Power/wells: cells are abutted into a continuous row with **filltie** cells between every cell and
+**endcap** cells at the ends.  filltie/endcap tie Nwell->VDD and Pwell->VSS internally (the std
+cells expose VNW/VPW only as well layers, so without these taps the wells float).  The row shares
+one VDD rail (top) and one VSS rail (bottom); the macro straps those to VDPWR/VGND.
 
-Returned: (cell "freq_divider", pins dict, [dff, inv, filltie, endcap]).  Pin dict is in
-cell-local coords (origin at the row's lower-left): CLK, RN, DIV2, DIV4, DIV8, VDD-rect,
-VSS-rect, _width.
+Returned: (cell "freq_divider", pins dict, [dff, inv, filltie, endcap]).  Pin dict (cell-local):
+CLK, RN, DIV2..DIV{2^N}, VDD-rect, VSS-rect, _width, _nstages.
 """
 import gdstk
 
@@ -27,6 +30,7 @@ PREFIX = "gf180mcu_fd_sc_mcu7t5v0__"
 
 M1, M2, VIA1 = (34, 0), (36, 0), (35, 0)
 DFF_W, INV_W, TIE_W, CAP_W, H = 19.04, 3.36, 1.12, 1.12, 3.92
+NSTAGES = 8
 
 
 def _via(div, x, y):
@@ -43,7 +47,7 @@ def _w(div, pts, w=0.3):
                                 layer=M2[0], datatype=M2[1]))
 
 
-def build_divider(std_gds, pdk_root):
+def build_divider(std_gds, pdk_root, nstages=NSTAGES):
     src = gdstk.read_gds(std_gds.format(PDK_ROOT=pdk_root))
     cells = {c.name: c for c in src.cells}
     dff = cells[PREFIX + "dffrnq_1"]
@@ -53,15 +57,15 @@ def build_divider(std_gds, pdk_root):
 
     div = gdstk.Cell("freq_divider")
     pins = {}
-    FB = H + 1.4
-    CK = -1.8
-    RNc = -3.1
+    FB = H + 1.4      # feedback channel (above the row)
+    CK = -1.8         # clock-chain channel (below the row)
+    RNc = -3.1        # reset rail channel (bottom-most)
 
-    # abutted: endcap | (dff filltie inv filltie) x3 | endcap  -> continuous rails + well taps
+    # abutted: endcap | (dff filltie inv filltie) x N | endcap  -> continuous rails + well taps
     x = 0.0
     div.add(gdstk.Reference(cap, (x, 0))); x += CAP_W
     placed = []
-    for i in range(3):
+    for i in range(nstages):
         dffx = x; x += DFF_W
         div.add(gdstk.Reference(tie, (x, 0))); x += TIE_W
         invx = x; x += INV_W
@@ -96,7 +100,7 @@ def build_divider(std_gds, pdk_root):
             pins["RN"] = (RN[0], RNc); rn_x0 = RN[0]
         _w(div, [(rn_x0, RNc), (RN[0], RNc)])
 
-        # clock chain: previous Q -> this CLK
+        # clock chain: previous Q -> this CLK (short hop to the cell on the right)
         if prev_q is None:
             pins["CLK"] = (CLK[0], CK)
             _w(div, [(CLK[0], CK), CLK])
@@ -108,4 +112,5 @@ def build_divider(std_gds, pdk_root):
     pins["VDD"] = (0.0, H, width, H + 0.6)
     pins["VSS"] = (0.0, -0.3, width, 0.3)
     pins["_width"] = width
+    pins["_nstages"] = nstages
     return div, pins, [dff, inv, tie, cap]

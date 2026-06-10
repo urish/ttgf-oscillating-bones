@@ -51,10 +51,10 @@ Vss VGND 0 0
 Vrst rst_n 0 PWL(0 0 12n 0 12.5n 3.3)
 .option rshunt=1e9
 .ic v($NODE)=0
-.tran 10p 400n uic
+.tran 20p 4.5u uic
 .control
 run
-wrdata $OUT/osc.txt v(uo_out_0) v(uo_out_1) v(uo_out_2) v(uo_out_3)
+wrdata $OUT/osc.txt v($NODE) v(uo_out_0) v(uo_out_1) v(uo_out_2) v(uo_out_3) v(uo_out_4) v(uo_out_5) v(uo_out_6) v(uo_out_7)
 quit
 .endc
 .end
@@ -66,14 +66,16 @@ python3 - "$OUT/osc.txt" <<'PY'
 import numpy as np, sys, os
 p=sys.argv[1]
 if not os.path.exists(p): print("simulation produced no output"); sys.exit(1)
-d=np.loadtxt(p); t=d[:,0]
+d=np.loadtxt(p); t=d[:, 0]
+# col 1 = ring node; cols 3,5.. = uo_out[0..7] = /256 /128 .. /2.  ua[0]=raw osc (= ring).
+rows=[("ring (ua[0]=osc)", 1, "")]
+for k in range(8):
+    rows.append((f"uo_out[{k}] osc_div_{2**(8-k)}", 3 + 2*k, f"osc/{2**(8-k)}"))
 base=None
-for nm, c in (("uo_out[0] osc_out", 1), ("uo_out[1] osc_div_2", 3),
-              ("uo_out[2] osc_div_4", 5), ("uo_out[3] osc_div_8", 7)):
+for nm, c, lbl in rows:
     v=d[:, c]; mid=(v.max()+v.min())/2
-    cr=np.where((v[:-1]<mid)&(v[1:]>=mid))[0]; cr=cr[t[cr] > 150e-9]
-    f=(1/np.median(np.diff(t[cr]))/1e6) if len(cr) >= 3 else 0
+    cr=np.where((v[:-1]<mid)&(v[1:]>=mid))[0]; cr=cr[t[cr] > 0.3e-6]
+    f=(1/np.median(np.diff(t[cr]))/1e6) if len(cr) >= 2 else 0
     if base is None and f: base=f
-    ratio=f"  (osc/{base/f:.0f})" if (f and base and c > 1) else ""
-    print(f"{nm:22s} {v.min():.2f}..{v.max():.2f} V  {f:6.1f} MHz{ratio}")
+    print(f"{nm:24s} {v.min():.2f}..{v.max():.2f} V  {f:8.3f} MHz  {lbl}")
 PY
