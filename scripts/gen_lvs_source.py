@@ -30,11 +30,14 @@ def main(out):
         s.append(f"Mp{i} {y} {a} VDPWR VDPWR pfet_03v3 W={W} L={L}")
         s.append(f"Mn{i} {y} {a} VGND VGND nfet_03v3 W={W} L={L}")
     osc = "n0"                                   # the tapped oscillator node
-    s.append(f"Rosc1 {osc} uo_out[0] 0")         # osc_out
-    s.append(f"Rosc2 {osc} ua[0] 0")             # osc_out_3v3
-    # divider: toggle DFF chain (dffrnq_1 + inv_2 feedback), clocked by osc, reset by rst_n
-    prev = osc
-    for i, q in enumerate(("uo_out[1]", "uo_out[2]", "uo_out[3]")):
+    # ua[0] output buffer: one SkullFET inverter, ring OSC -> ua[0]
+    s.append(f"Mbp ua[0] {osc} VDPWR VDPWR pfet_03v3 W={W} L={L}")
+    s.append(f"Mbn ua[0] {osc} VGND VGND nfet_03v3 W={W} L={L}")
+    # 8-stage toggle-DFF ripple divider clocked by ua[0] (the buffered node the clock taps),
+    # reset by rst_n. Stage j (/2^(j+1)) -> uo_out[7-j]  (uo_out[0]=/256 .. uo_out[7]=/2).
+    prev = "ua[0]"
+    for i in range(8):
+        q = f"uo_out[{7 - i}]"
         qb = f"qb{i}"
         s.append(f"Xdff{i} {prev} {qb} rst_n {q} VDPWR VGND VDPWR VGND "
                  f"gf180mcu_fd_sc_mcu7t5v0__dffrnq_1")

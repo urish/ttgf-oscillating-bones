@@ -107,6 +107,46 @@ def _via(cell, x, y, layers, m1=True):
         cell.add(gdstk.rectangle((x - s, y - s), (x + s, y + s), layer=cut[0], datatype=cut[1]))
 
 
+SKULL_BUFFER_GDS = os.path.join(os.path.dirname(__file__), "..", "gds", "skull_buffer.gds")
+# pin offsets relative to the placed skull-buffer origin (from the remapped cell)
+BUF_A = (5.0, 0.29)         # input A  (land on the cell's Metal2 A-pad, clear of its gate vias)
+BUF_Y = (-4.39, 0.29)       # output Y (Metal1 + Metal4 OSC tap)
+BUF_VGND = (-4.46, 8.70)    # VGND pad (Metal3)
+BUF_VDPWR = (-4.39, -8.45)  # VDPWR pad (Metal3)
+
+
+def add_ua_buffer(lib, top, pins, osc_xy):
+    """Place a SkullFET inverter as the ua[0] output buffer in the clear bottom strip and wire it:
+    ring OSC -> A; Y -> ua[0] pin (which the divider clock also taps). Powered from the left
+    stripes along the bottom edge. A 3.3V SkullFET (same device as the ring) decouples the ring
+    from any external load on ua[0]."""
+    buf = gdstk.read_gds(SKULL_BUFFER_GDS).cells[0]
+    lib.add(buf)
+    BX, BY = 300.0, 15.0
+    top.add(gdstk.Reference(buf, (BX, BY)))
+    A = (BX + BUF_A[0], BY + BUF_A[1])
+    Y = (BX + BUF_Y[0], BY + BUF_Y[1])
+    vg = (BX + BUF_VGND[0], BY + BUF_VGND[1])
+    vd = (BX + BUF_VDPWR[0], BY + BUF_VDPWR[1])
+    ua0 = next(r for (n, d, r) in pins if n == "ua[0]")
+    ua0_cx = (ua0[0] + ua0[2]) / 2
+    ox, oy = osc_xy
+
+    # OSC -> A: down beside the ring, over the TOP of the buffer, then down into A (A and Y are at
+    # the same y, so approach A from above to avoid crossing the Y output). Dip to M3 across the
+    # divider's clock route (the M4 horizontal at y~22, which is on the ua[0]/output net).
+    _wire(top, [(ox, oy), (ox, BY + 13.0), (A[0], BY + 13.0), (A[0], 24.0)], w=0.4, layer=M4)
+    _via(top, A[0], 24.0, [M3, M4]); _wire(top, [(A[0], 24.0), (A[0], 20.0)], w=0.4, layer=M3)
+    _via(top, A[0], 20.0, [M3, M4]); _wire(top, [(A[0], 20.0), A], w=0.4, layer=M4)
+    _via(top, *A, [M2, M3, M4])      # A already has a Metal2 pad; just via M2->M4
+    # Y -> ua[0]: out the bottom of the buffer, across to the ua[0] pin
+    _wire(top, [Y, (Y[0], BY - 12.0), (ua0_cx, BY - 12.0), (ua0_cx, 0.5)], w=0.4, layer=M4)
+    # power: M3 straps along the clear bottom edge to the left stripes (pads are Metal3)
+    VGND_X, VDPWR_X = VGND_SX + STRIPE_W / 2, VDPWR_SX + STRIPE_W / 2
+    _wire(top, [vg, (VGND_X, vg[1])], w=1.0, layer=M3); via_m4_m3(top, VGND_X, vg[1])
+    _wire(top, [vd, (VDPWR_X, vd[1])], w=1.0, layer=M3); via_m4_m3(top, VDPWR_X, vd[1])
+
+
 def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     """Place the N-stage /2../256 std-cell ripple divider centred in the top strip and wire it up.
 
@@ -254,22 +294,18 @@ def build(ring_gds, def_path, out_gds):
             top.add(gdstk.rectangle((x2, py - 0.6), (px, py + 0.6), layer=M4[0], datatype=M4[1]))
         via_m4_m3(top, px, py)
 
-    # --- analog output ua[0] = osc_out_3v3: tap the live OSC node (a ring inter-stage output
-    # brought up to Metal4 + labelled "OSC" by the remap) and route it to the ua[0] pin.
+    # --- analog output ua[0] = osc_out_3v3: the ring OSC node drives a SkullFET inverter BUFFER
+    # whose output feeds ua[0] (and, via the ua[0] pin, the divider clock). The buffer isolates
+    # the ring from any external load on ua[0] -- a few pF directly on the OSC node otherwise drops
+    # the ring frequency 25-60% (see MIGRATION.md). The ring only sees the buffer's gate.
     osc_xy = None
     for lb in ring.labels:
         if lb.text == "OSC":
             osc_xy = (lb.origin[0] + cx, lb.origin[1] + cy)
-    ua0 = next(r for (n, d, r) in pins if n == "ua[0]")
-    ua0_cx = (ua0[0] + ua0[2]) / 2
     if osc_xy:
-        ox, oy = osc_xy
-        # L-route on Metal4: up from ua[0] to the OSC y, then across to OSC x
-        top.add(gdstk.rectangle((ua0_cx - 0.5, ua0[1]), (ua0_cx + 0.5, oy + 0.5), layer=M4[0], datatype=M4[1]))
-        x_lo, x_hi = sorted((ua0_cx, ox))
-        top.add(gdstk.rectangle((x_lo, oy - 0.5), (x_hi, oy + 0.5), layer=M4[0], datatype=M4[1]))
+        add_ua_buffer(lib, top, pins, osc_xy)
 
-    # === /2 /4 /8 divider (uo_out[1..3]) + osc_out (uo_out[0]) ===
+    # === osc_out + 8-bit /2../256 divider (uo_out[0..7]) ===
     if osc_xy:
         add_divider(lib, top, pins, cx, cy, H, osc_xy)
 

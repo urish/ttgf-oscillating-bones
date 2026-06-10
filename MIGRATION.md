@@ -44,12 +44,12 @@ die outline, and the skull ring placed in the centre. Emits the matching LEF (co
 - **Magic DRC: 0 violations** (full macro).
 - **Post-layout SPICE oscillates and divides.** Extracting the hardened GDS with magic and
   simulating with the gf180mcuD ngspice models (`make sim`), the 21-stage ring oscillates
-  **rail-to-rail at ~119 MHz**, and the std-cell ripple divider produces clean **/2, /4, /8** taps:
-  `uo_out[0]=osc_out` ~119 MHz, `uo_out[1..3]=osc_div_2/4/8` ~59/30/15 MHz, plus the raw 3.3V
-  oscillation on `ua[0]`. The testbench supplies **only VDPWR/VGND and the substrate bias** — it
-  does **not** force any std-cell rail or device well, so the behaviour reflects the *actual*
-  extracted connectivity: every pfet body ties to VDPWR through its n-well tap, every std-cell rail
-  is strapped to VDPWR/VGND, and the extraction shows **no floating well/rail nets**.
+  **rail-to-rail at ~120 MHz**, and the 8-bit std-cell ripple divider produces clean **/2 .. /256**
+  taps: `uo_out[7]=÷2` ~60 MHz down to `uo_out[0]=÷256` ~0.47 MHz; the buffered raw oscillation is
+  on `ua[0]`. The testbench supplies **only VDPWR/VGND and the substrate bias** — it does **not**
+  force any std-cell rail or device well, so the behaviour reflects the *actual* extracted
+  connectivity: every pfet body ties to VDPWR through its n-well tap, every std-cell rail is
+  strapped to VDPWR/VGND, and the extraction shows **no floating well/rail nets**.
 - **TT precheck structural checks pass** (run locally against `tt-support-tools/precheck`):
   KLayout Checks, Boundary check, Layer check, Cell name check, Power pin check, Analog pin check,
   Pin check.
@@ -71,26 +71,40 @@ and VDPWR remain separate nets, every ring pfet body + std-cell rail stays tied,
 The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and run
 in CI; magic DRC runs clean locally.
 
-## The /2 /4 /8 divider (`scripts/build_divider.py`)
+## The 8-bit /2../256 divider (`scripts/build_divider.py`)
 
-The divider is a 3-stage ripple counter of `gf180mcu_fd_sc_mcu7t5v0` std cells: each /2 stage is a
-**`dffrnq_1`** DFF + an **`inv_2`** wired as a toggle FF (D = ~Q, since gf180 DFFs have no QN). The
-cells are abutted into a continuous row with **`filltie`** cells between every cell and **`endcap`**
-cells at the ends — these tie Nwell→VDD and Pwell→VSS (the std cells expose VNW/VPW only as well
-layers, so without these taps the wells float and the cells don't work). It is placed in the top
-strip and connected by a small **channel router** (in `add_divider`): Metal3 = horizontal tracks
-(one unique y per net), Metal4 = vertical risers (unique x), so cross-net crossings can't short;
-the clock enters from the bottom (tapped off the `ua[0]`/OSC node *outside* the ring) and takes one
-Metal3 dip under the VGND supply connector. `uo_out[0]=osc_out`, `uo_out[1..3]=osc_div_2/4/8`.
+The divider is an **8-stage** ripple counter of `gf180mcu_fd_sc_mcu7t5v0` std cells: each /2 stage
+is a **`dffrnq_1`** DFF + an **`inv_2`** wired as a toggle FF (D = ~Q, since gf180 DFFs have no QN).
+The cells are abutted into a continuous row with **`filltie`** cells between every cell and
+**`endcap`** cells at the ends — these tie Nwell→VDD and Pwell→VSS (the std cells expose VNW/VPW
+only as well layers, so without these taps the wells float and the cells don't work).
 
-The divider's VDD/VSS rails are strapped to VDPWR/VGND with two short Metal3 straps tapped on
-filltie columns (one to each die-edge power stripe). **Note the easy mistake here:** the strap's
-far end must use the *die* width (`2*cx`), not the local divider width — an early version computed
-`VDPWR_X` from the divider width and the VDD strap stopped in empty space, leaving every std-cell
-rail floating (the divider still "worked" in sim only because the testbench was force-tying the
-rails; removing that force-tie is how the bug surfaced).
+The DFF's Q sits on the right and CLK on the left, so the ripple chain hops left→right with short
+clock wires and the clock enters at the **left** end. `add_divider` **centres** the row so each
+stage's output fans to the `uo_out` pin at the matching left→right position — the 8 output routes
+therefore **don't cross**. The mapping is `uo_out[0]=÷256` (MSB) .. `uo_out[7]=÷2` (LSB); `osc_out`
+is no longer on a `uo_out` pin (the raw oscillation is on `ua[0]`). Routing discipline: Metal3 =
+horizontal tracks (unique y), Metal4 = vertical risers (unique x). The divider's VDD/VSS rails are
+strapped to VDPWR/VGND on filltie columns (straps widened to 0.6 µm, 2-cut vias — cheap EM/IR
+margin). **Watch the strap far-end:** it must use the *die* width (`2*cx`), not the local divider
+width — an early version computed `VDPWR_X` from the divider width and the strap stopped in empty
+space, leaving the std-cell rails floating (only the testbench's old force-tie hid it).
 
-Post-layout SPICE confirms **/2, /4, /8** (≈59 / 30 / 15 MHz from the ≈119 MHz ring).
+Post-layout SPICE confirms **/2 .. /256** (≈60 / 30 / 15 / 7.5 / 3.7 / 1.9 / 0.94 / 0.47 MHz from
+the ≈120 MHz ring).
+
+## The ua[0] output buffer (`add_ua_buffer`)
+
+`ua[0]` is driven through **one more SkullFET inverter** (a 3.3V device — the same as the ring,
+recovered by remapping the original `skullfet_inverter` cell, committed as `gds/skull_buffer.gds`)
+placed in the clear bottom strip and powered from the left stripes along the bottom edge:
+ring OSC → buffer → `ua[0]` (and the divider clock, which taps the buffered node). This isolates
+the ring from any external load on `ua[0]`. Measured (swept cap on `ua[0]`): **without** the buffer
+the ring frequency drops **−28 % at 1 pF, −62 % at 10 pF** (loading the OSC node directly distorts
+the very oscillation you're observing); **with** it the ring stays at ~120 MHz across 0→10 pF. The
+buffer's own output swing still falls under heavy load (a single inverter), but the ring — and the
+frequency you read — is protected; the low divider taps remain the clean amplitude observation
+points.
 
 ## LVS (`make lvs`)
 
@@ -108,7 +122,7 @@ simulation.
 skull inverter's n-well tap (preserved by the pSD-based implant regeneration above), the nfet
 bodies tie to VGND, and the std-cell rails are strapped to VDPWR/VGND. The extraction contains **no
 floating `w_*` well nets**, which is also why removing the simulation force-tie left the frequency
-essentially unchanged (~119 MHz).
+essentially unchanged (~120 MHz).
 
 ## SPICE / xschem (gf180)
 
