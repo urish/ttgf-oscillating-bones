@@ -37,6 +37,13 @@ def render(gds, png, width=800, cellname=None, bg="#ffffff"):
     lib = gdstk.read_gds(gds)
     cell = ([c for c in lib.cells if c.name == cellname][0]
             if cellname else lib.top_level()[0])
+    # Flatten and drop text labels (VGND/VDPWR/OSC/pin labels otherwise crowd the image).
+    flat = cell.copy("_flat", deep_copy=True).flatten()
+    cell = gdstk.Cell("_render")
+    for p in flat.polygons:
+        cell.add(p)
+    for pa in flat.paths:
+        cell.add(pa)
     shape = {}
     for k, (f, s, o, _z) in STYLE.items():
         d = {"stroke": s}
