@@ -243,13 +243,36 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     _via(top, rn[0], rn[1], [M2, M3, M4])
 
     # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[j] (uo_out[0]=/2 .. uo_out[7]=/256). With the
-    # mirror the stage order matches the pin order, so these routes fan without crossing. ---
+    # mirror the stage order matches the pin order, so the eight routes fan without crossing.
+    # Each route is Q -> riser -> M3 jog (at its own track) -> M4 riser -> pin. The jog MUST be on
+    # M3: it crosses other outputs' M4 pin-risers, and the pins are on M4. The PIN-side riser must be
+    # M4 (it climbs past higher M3 tracks). The FLOP-side riser, though, only needs M4 where its short
+    # climb would clip a lower track or the vdd strap (M3); everywhere else it stays on M3 straight
+    # from Q to its track -- no needless M4 hop. We compute that per output so it self-adjusts. ---
+    qxs = {j: P(f"DIV{2 ** (j + 1)}")[0] for j in range(N)}
+    txs = {j: pin_cx(f"uo_out[{j}]") for j in range(N)}
+    span = {j: (min(qxs[j], txs[j]), max(qxs[j], txs[j])) for j in range(N)}
+    vdd_strap = (min(VDPWR_X, vdd_tap), max(VDPWR_X, vdd_tap))   # M3 strap at rail_vdd (303.9)
+    m = 0.5                                                      # clearance margin before forcing M4
+
+    def flop_needs_m4(j):
+        """True if the flop-side riser at qxs[j] (climbing 303 -> t_out[j]) would touch any lower
+        output's M3 track or the vdd M3 strap (both sit between the row and t_out[j])."""
+        if vdd_strap[0] - m <= qxs[j] <= vdd_strap[1] + m:
+            return True
+        return any(t_out[k] < t_out[j] and span[k][0] - m <= qxs[j] <= span[k][1] + m
+                   for k in range(N) if k != j)
+
     for j in range(N):
         qx, qy = P(f"DIV{2 ** (j + 1)}")
         pin = f"uo_out[{j}]"
         tx, trk = pin_cx(pin), t_out[j]
-        _via(top, qx, qy, [M2, M3, M4]); _wire(top, [(qx, qy), (qx, trk)], w=0.4, layer=M4)
-        mvia(qx, trk); _wire(top, [(qx, trk), (tx, trk)], w=0.4, layer=M3)
+        if flop_needs_m4(j):
+            _via(top, qx, qy, [M2, M3, M4]); _wire(top, [(qx, qy), (qx, trk)], w=0.4, layer=M4)
+            mvia(qx, trk)                                        # drop back to M3 for the jog
+        else:
+            _via(top, qx, qy, [M2, M3]); _wire(top, [(qx, qy), (qx, trk)], w=0.4, layer=M3)
+        _wire(top, [(qx, trk), (tx, trk)], w=0.4, layer=M3)     # M3 jog to the pin's x
         mvia(tx, trk); _wire(top, [(tx, trk), (tx, pinrect[pin][1])], w=0.4, layer=M4)
 
 
