@@ -133,11 +133,8 @@ def add_ua_buffer(lib, top, pins, osc_xy):
     ox, oy = osc_xy
 
     # OSC -> A: down beside the ring, over the TOP of the buffer, then down into A (A and Y are at
-    # the same y, so approach A from above to avoid crossing the Y output). Dip to M3 across the
-    # divider's clock route (the M4 horizontal at y~22, which is on the ua[0]/output net).
-    _wire(top, [(ox, oy), (ox, BY + 13.0), (A[0], BY + 13.0), (A[0], 24.0)], w=0.4, layer=M4)
-    _via(top, A[0], 24.0, [M3, M4]); _wire(top, [(A[0], 24.0), (A[0], 20.0)], w=0.4, layer=M3)
-    _via(top, A[0], 20.0, [M3, M4]); _wire(top, [(A[0], 20.0), A], w=0.4, layer=M4)
+    # the same y, so approach A from above to avoid crossing the Y output).
+    _wire(top, [(ox, oy), (ox, BY + 13.0), (A[0], BY + 13.0), A], w=0.4, layer=M4)
     _via(top, *A, [M2, M3, M4])      # A already has a Metal2 pad; just via M2->M4
     # Y -> ua[0]: out the bottom of the buffer, across to the ua[0] pin
     _wire(top, [Y, (Y[0], BY - 12.0), (ua0_cx, BY - 12.0), (ua0_cx, 0.5)], w=0.4, layer=M4)
@@ -169,22 +166,23 @@ def tie_unused_low(top, pins, H):
 
 
 def add_divider(lib, top, pins, cx, cy, H, osc_xy):
-    """Place the N-stage /2../256 std-cell ripple divider centred in the top strip and wire it up.
+    """Place the N-stage /2../256 std-cell ripple divider in the top strip and wire it up.
 
-    Centred under the uo_out pin cluster. Mapping is LSB-first: stage j (DIV2^(j+1)) -> uo_out[j]
-    (uo_out[0]=/2 .. uo_out[N-1]=/256). Stages run left->right but pins run right->left, so these
-    routes cross; the M3-track (unique y) / M4-riser (unique x) discipline keeps crossings
-    short-free.
+    The row is built /2-leftmost but placed MIRRORED, so /2 ends up rightmost (next to uo_out[0])
+    and /256 leftmost. Mapping is LSB-first: stage j (DIV2^(j+1)) -> uo_out[j] (uo_out[0]=/2 ..
+    uo_out[N-1]=/256). The stage order now matches the pin order, so the output routes DON'T cross,
+    and CLK lands on the right next to ua[0] (short clock route). M3 = horizontal tracks (unique
+    y), M4 = vertical risers (unique x).
     """
     pdk_root = os.environ.get("PDK_ROOT", "")
     divcell, dp, std_cells = BD.build_divider(BD.STD_GDS_DEFAULT, pdk_root)
     lib.add(divcell, *std_cells)
     W = dp["_width"]; N = dp["_nstages"]
-    DX0, DY0 = round(cx - W / 2, 2), 300.0      # centred -> symmetric, non-crossing output fan
-    top.add(gdstk.Reference(divcell, (DX0, DY0)))
+    DX0, DY0 = round(cx - W / 2, 2), 300.0      # centred under the uo_out pins
+    top.add(gdstk.Reference(divcell, (DX0 + W, DY0), rotation=math.pi, x_reflection=True))
 
     def P(name):
-        v = dp[name]; return (DX0 + v[0], DY0 + v[1])
+        v = dp[name]; return (DX0 + W - v[0], DY0 + v[1])   # mirror: x flips, y unchanged
     pinrect = {n: r for (n, d, r) in pins}
     pin_cx = lambda n: (pinrect[n][0] + pinrect[n][2]) / 2
     def mvia(x, y): _via(top, x, y, [M3, M4])
@@ -206,12 +204,13 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     VGND_X, VDPWR_X = VGND_SX + STRIPE_W / 2, VDPWR_SX + STRIPE_W / 2
     rail_vss, rail_vdd = DY0, DY0 + 3.9
     PW = 0.6                                     # power strap width (50% wider than the old 0.4um)
-    # inter-cell filltie columns (clear of the DFF Q risers) for the power taps
-    ties = [DX0 + BD.CAP_W + BD.DFF_W + BD.TIE_W + BD.INV_W + BD.TIE_W / 2
-            + j * (BD.DFF_W + 2 * BD.TIE_W + BD.INV_W) for j in range(N)]
+    # inter-cell filltie columns (clear of the DFF Q risers), mirrored; tap the two LEFTMOST ones
+    # so the straps to the left-edge stripes stay short.
+    ties = [DX0 + W - (BD.CAP_W + BD.DFF_W + BD.TIE_W + BD.INV_W + BD.TIE_W / 2
+            + j * (BD.DFF_W + 2 * BD.TIE_W + BD.INV_W)) for j in range(N)]
 
     # --- power: VSS rail -> VGND stripe, VDD rail -> VDPWR stripe (both on the left edge) ---
-    vss_tap, vdd_tap = ties[0], ties[1]
+    vss_tap, vdd_tap = ties[-1], ties[-2]
     beefy(vss_tap, rail_vss, [M1, M2, M3])
     _wire(top, [(vss_tap, rail_vss), (VGND_X, rail_vss)], w=PW, layer=M3)
     beefy(VGND_X, rail_vss, [M3, M4])
@@ -224,17 +223,13 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     t_clk = DY0 + 22.0                                   # 322
     t_rn = DY0 - 5.0                                     # 295 (below the row, above the ring)
 
-    # --- clock: OSC up the left edge to CLK (leftmost stage), M3 dip across the two left-edge
-    #     supply connectors (VDPWR ~138, VGND ~187) ---
+    # --- clock: ua[0] (buffered OSC) up the FREE right edge to CLK (the mirror put CLK on the
+    #     rightmost stage, next to ua[0]) ---
     ua0r = next(r for (n, d, r) in pins if n == "ua[0]")
     tapx = (ua0r[0] + ua0r[2]) / 2
-    csx = 20.0
     ck = P("CLK")
-    _wire(top, [(tapx, 0.5), (tapx, 22.0), (csx, 22.0)], w=0.4, layer=M4)
-    _wire(top, [(csx, 22.0), (csx, 134.0)], w=0.4, layer=M4)
-    mvia(csx, 134.0); _wire(top, [(csx, 134.0), (csx, 192.0)], w=0.4, layer=M3)
-    mvia(csx, 192.0); _wire(top, [(csx, 192.0), (csx, t_clk)], w=0.4, layer=M4)
-    mvia(csx, t_clk); _wire(top, [(csx, t_clk), (ck[0], t_clk)], w=0.4, layer=M3)
+    _wire(top, [(tapx, 0.5), (tapx, t_clk)], w=0.4, layer=M4)
+    mvia(tapx, t_clk); _wire(top, [(tapx, t_clk), (ck[0], t_clk)], w=0.4, layer=M3)
     mvia(ck[0], t_clk); _wire(top, [(ck[0], t_clk), (ck[0], ck[1])], w=0.4, layer=M4)
     _via(top, ck[0], ck[1], [M2, M3, M4])
 
@@ -245,9 +240,8 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     _wire(top, [(rn[0], t_rn), (rn[0], rn[1])], w=0.4, layer=M4)
     _via(top, rn[0], rn[1], [M2, M3, M4])
 
-    # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[j], i.e. uo_out[0]=/2 (LSB) .. uo_out[7]=/256.
-    # The stages run left->right (/2 .. /256) but the pins run right->left, so these routes cross;
-    # the M3-track (unique y) / M4-riser (unique x) discipline keeps every crossing short-free. ---
+    # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[j] (uo_out[0]=/2 .. uo_out[7]=/256). With the
+    # mirror the stage order matches the pin order, so these routes fan without crossing. ---
     for j in range(N):
         qx, qy = P(f"DIV{2 ** (j + 1)}")
         pin = f"uo_out[{j}]"

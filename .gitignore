@@ -31,3 +31,4 @@ spice/pdk_lib.spice
 
 # local DRC reports (make drc_klayout)
 drc/
+docs/layout.svg

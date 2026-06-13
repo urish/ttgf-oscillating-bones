@@ -54,7 +54,7 @@ Vrst rst_n 0 PWL(0 0 12n 0 12.5n 3.3)
 .tran 20p 4.5u uic
 .control
 run
-wrdata $OUT/osc.txt v($NODE) v(uo_out_0) v(uo_out_1) v(uo_out_2) v(uo_out_3) v(uo_out_4) v(uo_out_5) v(uo_out_6) v(uo_out_7)
+wrdata $OUT/osc.txt v(ua_0) v(uo_out_0) v(uo_out_1) v(uo_out_2) v(uo_out_3) v(uo_out_4) v(uo_out_5) v(uo_out_6) v(uo_out_7)
 quit
 .endc
 .end
@@ -67,10 +67,10 @@ import numpy as np, sys, os
 p=sys.argv[1]
 if not os.path.exists(p): print("simulation produced no output"); sys.exit(1)
 d=np.loadtxt(p); t=d[:, 0]
-# col 1 = ring node; cols 3,5.. = uo_out[0..7] = /256 /128 .. /2.  ua[0]=raw osc (= ring).
+# col 1 = ua[0] (buffered raw osc = ring); cols 3,5.. = uo_out[0..7] = /2 /4 .. /256 (LSB first).
 rows=[("ring (ua[0]=osc)", 1, "")]
 for k in range(8):
-    rows.append((f"uo_out[{k}] osc_div_{2**(8-k)}", 3 + 2*k, f"osc/{2**(8-k)}"))
+    rows.append((f"uo_out[{k}] osc_div_{2**(k+1)}", 3 + 2*k, f"osc/{2**(k+1)}"))
 base=None
 for nm, c, lbl in rows:
     v=d[:, c]; mid=(v.max()+v.min())/2

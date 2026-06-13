@@ -71,9 +71,10 @@ connectivity is geometric. Both power stripes sit on the **left** die edge (VGND
 just inside it), matching the original IHP arrangement so the TT power grid — which enters from the
 left — connects without strips reaching across the skull. They run ~97% of the die height. The two
 supply connectors land on left-side ring pads at well-separated angles (different y); the VGND
-connector hops the VDPWR stripe on a short Metal3 dip (outside the ring, clear of the Metal3 rings),
-and the divider's clock riser dips to Metal3 across both connectors. Verified after the move: VGND
-and VDPWR remain separate nets, every ring pfet body + std-cell rail stays tied, nothing floats.
+connector hops the VDPWR stripe on a short Metal3 dip (outside the ring, clear of the Metal3 rings).
+With the divider mirrored, the clock riser now climbs the free **right** edge to the CLK pin and
+never touches the left-side connectors. Verified after the move: VGND and VDPWR remain separate
+nets, every ring pfet body + std-cell rail stays tied, nothing floats.
 
 The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and run
 in CI; magic DRC runs clean locally.
@@ -86,12 +87,16 @@ The cells are abutted into a continuous row with **`filltie`** cells between eve
 **`endcap`** cells at the ends — these tie Nwell→VDD and Pwell→VSS (the std cells expose VNW/VPW
 only as well layers, so without these taps the wells float and the cells don't work).
 
-The DFF's Q sits on the right and CLK on the left, so the ripple chain hops left→right with short
-clock wires and the clock enters at the **left** end. `add_divider` **centres** the row so the
-outputs reach the pin cluster with minimal fan. The mapping is **LSB-first** —
-`uo_out[0]=÷2` .. `uo_out[7]=÷256`; since the stages run left→right (÷2..÷256) but the pins run
-right→left, these output routes **cross**, but the Metal3-track (unique y) / Metal4-riser (unique x)
-discipline keeps every crossing short-free. `osc_out` is no longer on a `uo_out` pin (the raw
+The DFF's Q sits on the right and CLK on the left, so the ripple chain hops with short clock wires.
+The whole row is **horizontally mirrored** (`add_divider` places the cell with `x_reflection` +
+180° rotation) so the ÷2 stage ends up on the **right** and ÷256 on the **left**, matching the
+pin order. `add_divider` **centres** the row so the outputs reach the pin cluster with minimal fan.
+The mapping is **LSB-first** — `uo_out[0]=÷2` .. `uo_out[7]=÷256`; because the mirror puts the stage
+order in the same direction as the pin order, the eight output routes **fan straight down without
+crossing** (the Metal3-track / Metal4-riser discipline still guards every remaining crossing — e.g.
+the supply taps — but the divider taps themselves no longer cross). The mirror also frees the right
+edge, so the clock rises straight up from the buffered `ua[0]` node to the (now right-hand) CLK pin
+— no left-edge detour and no Metal3 dip. `osc_out` is no longer on a `uo_out` pin (the raw
 oscillation is on `ua[0]`). The divider's VDD/VSS rails are
 strapped to VDPWR/VGND on filltie columns (straps widened to 0.6 µm, 2-cut vias — cheap EM/IR
 margin). **Watch the strap far-end:** it must use the *die* width (`2*cx`), not the local divider

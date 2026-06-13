@@ -56,8 +56,10 @@ and the precheck**, and confirm nothing floats (see rules below).
   floating n-wells.) After a layout change, the raw extraction must contain **no** `.VDD/.VSS/.VNW/
   .VPW` or floating `w_*` well nets.
 - **Routing discipline** (`add_divider`, `add_ua_buffer`): Metal3 = horizontal tracks (unique y per
-  net), Metal4 = vertical risers (unique x). Different-net M3×M4 crossings can't short — keep it so;
-  watch crossings against the clock route, which carries the `ua[0]`/output net.
+  net), Metal4 = vertical risers (unique x). Different-net M3×M4 crossings can't short — keep it so.
+  The divider is horizontally mirrored so the ÷2..÷256 stages line up with the pin order: the eight
+  output taps fan straight down without crossing, and the clock rises up the free **right** edge from
+  the buffered `ua[0]` node (no left-edge detour, no Metal3 dip).
 - **Implant polarity follows the original p-select (pSD), not Nwell membership** (`regen_implants`
   in `remap_to_gf180.py`): keying off Nwell buries the n+ n-well taps and floats the pfet bodies.
 - **Both power stripes sit on the LEFT edge** (VGND leftmost, VDPWR just inside), spanning ~97 % of
