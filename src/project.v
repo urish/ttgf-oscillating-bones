@@ -17,7 +17,7 @@ module tt_um_oscillating_bones (
     input  wire [7:0] uio_in,   // IOs: Input path
     output wire [7:0] uio_out,  // IOs: Output path
     output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    inout  wire [7:0] ua,       // Analog pins; ua[0] = osc_out_3v3 (buffered raw 3.3V oscillation)
+    inout  wire [7:0] ua,       // Analog pins; ua[0] = osc_out (buffered raw 3.3V oscillation)
     input  wire       ena,      // always 1 when the design is powered
     input  wire       clk,      // clock (unused)
     input  wire       rst_n     // reset_n - low to reset the frequency divider
@@ -28,7 +28,7 @@ module tt_um_oscillating_bones (
   //   uo_out[1] = osc_div_4      uo_out[5] = osc_div_64
   //   uo_out[2] = osc_div_8      uo_out[6] = osc_div_128
   //   uo_out[3] = osc_div_16     uo_out[7] = osc_div_256
-  //   ua[0]     = osc_out_3v3    (buffered raw ~120 MHz oscillation)
+  //   ua[0]     = osc_out       (buffered raw ~120 MHz oscillation)
 
 endmodule
 `default_nettype wire

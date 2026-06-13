@@ -25,7 +25,7 @@ minimum width/spacing/gate rules — see `scripts/remap_to_gf180.py`).
 
 | Pin       | Signal             | Post-layout frequency |
 |-----------|--------------------|-----------------------|
-| ua[0]     | osc_out_3v3 (buffered raw 3.3V oscillation) | ~120 MHz |
+| ua[0]     | osc_out (buffered raw 3.3V oscillation) | ~120 MHz |
 | uo_out[0] | osc_div_2          | ~60 MHz   |
 | uo_out[1] | osc_div_4          | ~30 MHz   |
 | uo_out[2] | osc_div_8          | ~15 MHz   |
