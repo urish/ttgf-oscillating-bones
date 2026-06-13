@@ -28,3 +28,6 @@ __pycache__/
 # lvs report
 lvs.report
 spice/pdk_lib.spice
+
+# local DRC reports (make drc_klayout)
+drc/

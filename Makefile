@@ -63,8 +63,9 @@ drc: $(TARGET_GDS)
 		magic -rcfile $(MAGIC_RC) -noconsole -dnull
 .PHONY: drc
 
-# KLayout FEOL/BEOL DRC (as run in CI precheck).
+# KLayout FEOL/BEOL DRC (as run in CI precheck). Report goes to the (gitignored) drc/ dir.
 drc_klayout: $(TARGET_GDS)
+	mkdir -p drc
 	klayout -b -r $(DRC_DECK) -rd input=$(PWD)/$< -rd report=$(PWD)/drc/gf180_drc.lyrdb
 .PHONY: drc_klayout
 
