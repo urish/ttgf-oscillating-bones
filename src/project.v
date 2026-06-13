@@ -29,6 +29,8 @@ module tt_um_oscillating_bones (
   //   uo_out[2] = osc_div_8      uo_out[6] = osc_div_128
   //   uo_out[3] = osc_div_16     uo_out[7] = osc_div_256
   //   ua[0]     = osc_out       (buffered raw ~120 MHz oscillation)
+  // All unused outputs are tied low in the macro: uio_out[7:0] = 0 and uio_oe[7:0] = 0
+  // (so the bidirectional pads stay in input / high-Z mode).
 
 endmodule
 `default_nettype wire

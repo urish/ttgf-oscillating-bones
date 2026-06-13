@@ -35,7 +35,9 @@ minimum width/spacing/gate rules — see `scripts/remap_to_gf180.py`).
 | uo_out[6] | osc_div_128        | ~0.94 MHz |
 | uo_out[7] | osc_div_256        | ~0.47 MHz |
 
-(`uo_out[0]` is the LSB / ÷2, `uo_out[7]` the MSB / ÷256.)
+(`uo_out[0]` is the LSB / ÷2, `uo_out[7]` the MSB / ÷256.) All unused outputs — `uio_out[7:0]` and
+the output-enables `uio_oe[7:0]` — are tied low in the macro, so the bidirectional pads stay in
+input mode.
 
 **Post-layout simulation** (extract the hardened GDS with magic, simulate with the gf180mcuD
 ngspice models — run `make sim`): the ring oscillates **rail-to-rail at ~120 MHz** and the 8-stage

@@ -147,6 +147,27 @@ def add_ua_buffer(lib, top, pins, osc_xy):
     _wire(top, [vd, (VDPWR_X, vd[1])], w=1.0, layer=M3); via_m4_m3(top, VDPWR_X, vd[1])
 
 
+def tie_unused_low(top, pins, H):
+    """Drive every unused OUTPUT pin low. uo_out[0..7] are the divider taps (used); the unused
+    outputs are uio_out[0..7] and the output-enables uio_oe[0..7]. They sit contiguously on the
+    top edge (x ~ 33..142), so a Metal4 rail just below the pin row taps all 16 and ties them to
+    the VGND stripe. Grounding the output-enables low also keeps the bidirectional pads in input
+    (high-Z) mode."""
+    pr = {n: r for (n, d, r) in pins}
+    targets = [f"uio_out[{i}]" for i in range(8)] + [f"uio_oe[{i}]" for i in range(8)]
+    xs = sorted((pr[t][0] + pr[t][2]) / 2 for t in targets)
+    y_pin = pr[targets[0]][1]                      # pin bottom (~324.4)
+    yr = 323.0                                     # rail: below the pins, above the divider routing
+    VGND_X = VGND_SX + STRIPE_W / 2
+    # Metal4 rail across the pins, on to the VGND stripe. The stripes end at y=H-5 (< yr), so the
+    # rail passes safely over the VDPWR stripe; drop a short stub into the VGND stripe to connect.
+    _wire(top, [(xs[-1] + 1.0, yr), (VGND_X, yr)], w=0.5, layer=M4)
+    _wire(top, [(VGND_X, yr), (VGND_X, H - 7.0)], w=0.6, layer=M4)
+    # tap each unused-output pin down to the rail
+    for x in xs:
+        _wire(top, [(x, y_pin), (x, yr)], w=0.4, layer=M4)
+
+
 def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     """Place the N-stage /2../256 std-cell ripple divider centred in the top strip and wire it up.
 
@@ -311,6 +332,9 @@ def build(ring_gds, def_path, out_gds):
     # === osc_out + 8-bit /2../256 divider (uo_out[0..7]) ===
     if osc_xy:
         add_divider(lib, top, pins, cx, cy, H, osc_xy)
+
+    # tie unused output pins (uio_out[0..7], uio_oe[0..7]) low
+    tie_unused_low(top, pins, H)
 
     lib.write_gds(out_gds)
     bb = top.bounding_box()

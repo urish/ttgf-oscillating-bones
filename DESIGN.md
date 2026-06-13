@@ -41,6 +41,11 @@ Metal4 signal pins at the template positions, VGND/VDPWR Metal4 power stripes, t
 die outline, and the skull ring placed in the centre. Emits the matching LEF (correct SIZE,
 `DIRECTION`, `USE POWER`/`USE GROUND`).
 
+All **unused output pins are tied low** (`tie_unused_low`): `uio_out[7:0]` and the output-enables
+`uio_oe[7:0]` sit contiguously on the top edge, so a Metal4 rail just below the pin row taps all 16
+and grounds them to the VGND stripe (the macro drives a clean 0 on every unused output, and the
+low output-enables keep the bidirectional pads in input/high-Z mode).
+
 ## What is validated ✅
 
 - **Magic DRC: 0 violations** (full macro).
