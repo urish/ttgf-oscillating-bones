@@ -95,8 +95,10 @@ The mapping is **LSB-first** — `uo_out[0]=÷2` .. `uo_out[7]=÷256`; because t
 order in the same direction as the pin order, the eight output routes **fan straight down without
 crossing** (the Metal3-track / Metal4-riser discipline still guards every remaining crossing — e.g.
 the supply taps — but the divider taps themselves no longer cross). The mirror also frees the right
-edge, so the clock rises straight up from the buffered `ua[0]` node to the (now right-hand) CLK pin
-— no left-edge detour and no Metal3 dip. `osc_out` is no longer on a `uo_out` pin (the raw
+edge: the clock rises up it from the buffered `ua[0]` node and lands on the (now right-hand) CLK pin
+directly — CLK and the reset `RN` both sit in the **clear channel just below the row** (between the
+row at y≈300 and the ring top at y≈293), so the clock jogs across there and never excursions above
+the row (no left-edge detour, no Metal3 dip). `osc_out` is no longer on a `uo_out` pin (the raw
 oscillation is on `ua[0]`). The divider's VDD/VSS rails are
 strapped to VDPWR/VGND on filltie columns (straps widened to 0.6 µm, 2-cut vias — cheap EM/IR
 margin). **Watch the strap far-end:** it must use the *die* width (`2*cx`), not the local divider

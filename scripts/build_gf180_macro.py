@@ -218,13 +218,15 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     _wire(top, [(vdd_tap, rail_vdd), (VDPWR_X, rail_vdd)], w=PW, layer=M3)
     beefy(VDPWR_X, rail_vdd, [M3, M4])
 
-    # track plan: N output tracks above the row, clock on top, reset below the row
+    # track plan: N output tracks above the row; clock and reset share the clear channel BELOW the
+    # row (between the row at y=300 and the ring top at ~293) — both CLK and RN sit just below the row
     t_out = [DY0 + 6.0 + 2.0 * j for j in range(N)]     # 306 .. 320
-    t_clk = DY0 + 22.0                                   # 322
-    t_rn = DY0 - 5.0                                     # 295 (below the row, above the ring)
+    t_clk = DY0 - 3.0                                    # 297 (channel below the row, next to CLK)
+    t_rn = DY0 - 5.0                                     # 295 (same channel, clear of t_clk)
 
-    # --- clock: ua[0] (buffered OSC) up the FREE right edge to CLK (the mirror put CLK on the
-    #     rightmost stage, next to ua[0]) ---
+    # --- clock: ua[0] (buffered OSC) up the FREE right edge straight to CLK. The mirror put CLK on
+    #     the rightmost stage (just below the row, next to ua[0]), so the riser jogs across in the
+    #     bottom channel and lands directly -- no excursion above the row. ---
     ua0r = next(r for (n, d, r) in pins if n == "ua[0]")
     tapx = (ua0r[0] + ua0r[2]) / 2
     ck = P("CLK")
