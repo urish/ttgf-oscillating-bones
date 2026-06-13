@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Generate a structural *source* SPICE netlist of the intended circuit for netgen LVS:
-a 21-stage ring of CMOS inverters (the SkullFETs, as nfet_03v3/pfet_03v3) whose output drives
-uo_out[0]/ua[0] and a 3-stage std-cell ripple divider (dffrnq_1 + inv_2) -> uo_out[1..3].
+a 21-stage ring of CMOS inverters (the SkullFETs, as nfet_03v3/pfet_03v3) whose output drives a
+22nd inverter (the ua[0] buffer) and an 8-stage std-cell ripple divider (dffrnq_1 + inv_2) whose
+taps are uo_out[0..7] = /2 .. /256.
 
 This is the "schematic" side of LVS; the "layout" side is the magic extraction of the GDS.
 Device sizes match the remapped SkullFET (W=5.87u, L=0.58u).  The std cells are referenced as

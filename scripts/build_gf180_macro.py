@@ -351,7 +351,11 @@ def build(ring_gds, def_path, out_gds):
         px, py = supply_pad(name, ang)
         pad_pos[name] = (px, py)
         if name == "VGND":
-            d0, d1 = VDPWR_SX - 1.0, VDPWR_SX + STRIPE_W + 1.0   # hop the VDPWR stripe on Metal3
+            # Hop the VDPWR stripe on Metal3. Keep the two Metal4 landing pads (via_m4_m3, ±0.7) well
+            # clear of the VDPWR stripe edges: a 1.7um inset leaves ~1.0um pad-to-stripe spacing vs
+            # the 0.28um M4.2a / 0.30um M4.2b minimum — generous margin on the one VGND/VDPWR
+            # (supply-to-supply) adjacency, where a process/mask shift closing the gap would be fatal.
+            d0, d1 = VDPWR_SX - 1.7, VDPWR_SX + STRIPE_W + 1.7
             top.add(gdstk.rectangle((x2, py - 0.6), (d0, py + 0.6), layer=M4[0], datatype=M4[1]))
             via_m4_m3(top, d0, py)
             top.add(gdstk.rectangle((d0, py - 0.6), (d1, py + 0.6), layer=M3[0], datatype=M3[1]))

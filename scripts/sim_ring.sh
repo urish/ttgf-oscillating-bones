@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Post-layout simulation of the SkullFET ring oscillator + /2/4/8 divider.
+# Post-layout simulation of the SkullFET ring oscillator + 8-bit /2../256 divider.
 #   - extracts gds/tt_um_oscillating_bones.gds with magic (device-level netlist)
 #   - drives VDPWR=3.3V, VGND=0 and runs a transient with ngspice + gf180mcuD models
-#   - reports osc_out + osc_div_2/4/8 on uo_out[0..3]
+#   - reports ua[0] (buffered raw osc) + the eight divider taps uo_out[0..7] = /2 .. /256
 #
 # Power connectivity is taken AS EXTRACTED — the testbench only supplies VDPWR/VGND and biases
 # the global substrate node; it deliberately does NOT force the std-cell rails or device wells,
 # so a missing power route shows up as a broken sim (not silently patched). The std cells get
-# VDPWR/VGND from the macro's power straps; the skull-inverter pfet n-wells have no explicit tap
-# and float (junction-biased), which is why the honest ring frequency (~139 MHz) is a little
-# higher than a hard-tied-well estimate.
+# VDPWR/VGND from the macro's power straps, and every skull-inverter pfet n-well is tapped to VDPWR
+# (the pSD-based implant regeneration in remap_to_gf180.py preserves the taps), so nothing floats;
+# the ring runs at ~120 MHz.
 #
 # Requires: PDK_ROOT pointing at a gf180mcuD install, and `magic` + `ngspice` on PATH.
 set -e

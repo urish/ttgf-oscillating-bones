@@ -20,7 +20,7 @@ all: $(TARGET_GDS) $(TARGET_LEF)
 
 # Assemble the full macro (GDS + LEF) from the committed gf180 ring: DEF frame + pins + power
 # stripes + placed ring + std-cell /2/4/8 divider.
-$(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) scripts/build_gf180_macro.py scripts/build_divider.py $(DEF)
+$(TARGET_GDS) $(TARGET_LEF): $(RING_GDS) gds/skull_buffer.gds scripts/build_gf180_macro.py scripts/build_divider.py $(DEF)
 	python3 scripts/build_gf180_macro.py $(RING_GDS) $(DEF) $(TARGET_GDS)
 
 # One-time IHP->gf180 migration that produced $(RING_GDS) (3.3V devices, 1.45x scale, implants/

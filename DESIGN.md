@@ -134,11 +134,14 @@ points.
 
 `scripts/run_lvs.sh` extracts the layout with magic and runs **netgen** against an intended
 structural source netlist (`scripts/gen_lvs_source.py`). netgen reports matching **device counts
-(48 = 48)** and matching **net counts (240 = 240)**, and the device classes are equivalent
-(`nfet_03v3 (21)`, `pfet_03v3 (21)`, 3× `dffrnq_1`, 3× `inv_2`). The residual "top-level pin
-matching" note is netgen reconciling the **black-boxed std-cell pins** against the flattened layout
-plus the intentional **`ua[0]`/`uo_out[0]` sharing the `osc_out` net** — not a connectivity error.
-Treat this as a strong **device- and net-count cross-check**; a fully signed-off LVS would flatten
+(60 = 60)** and matching **net counts (329 = 329)**, and the device classes are equivalent
+(`nfet_03v3 (22)`, `pfet_03v3 (22)`, 8× `dffrnq_1`, 8× `inv_2`) — 21 ring inverters + the `ua[0]`
+buffer give the 22 nfet/22 pfet, and the 8-stage divider gives the 8 DFF + 8 inverter toggles. The
+residual "top-level pin matching" note is netgen reconciling the **black-boxed std-cell pins**
+against the flattened layout, plus the unused outputs `uio_out[7:0]`/`uio_oe[7:0]` which are **tied
+to VGND** in the layout (so they collapse into the VGND net rather than presenting as 16 distinct
+pins) — not a connectivity error. Treat this as a strong **device- and net-count cross-check**; a
+fully signed-off LVS would flatten
 the std-cell subckts on both sides. The authoritative functional check is the un-forced post-layout
 simulation.
 
