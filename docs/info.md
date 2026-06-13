@@ -46,6 +46,13 @@ is strapped to VDPWR/VGND — nothing floats). With the buffer, a swept capaciti
 (0→10 pF) leaves the ring frequency **unchanged** at ~120 MHz; without it the same load would drop
 the ring 25–60 %.
 
+## Simulation results
+
+`osc_out` (the buffered ~120 MHz oscillation on `ua[0]`) and the first three divider taps, captured
+from the post-layout netlist (`make plot`):
+
+![Simulation results](layout_sim.png)
+
 ## Reset
 
 `rst_n` (active-low) resets **only the divider** — it asynchronously clears all eight flip-flops,

@@ -31,9 +31,10 @@ remap:
 	python3 scripts/remap_to_gf180.py $(IHP_SRC) $(RING_GDS) ring 1.45
 .PHONY: remap
 
-# Extract a SPICE netlist for simulation/LVS.
+# Extract a device-level SPICE netlist (for the manual spice/testbench.spice template).
+# `make sim` and `make lvs` do their own extraction (scripts/extract_sim.tcl / extract_lvs.tcl).
 $(SPICE): $(TARGET_GDS)
-	magic -rcfile $(MAGIC_RC) -noconsole -dnull scripts/extract_for_sim.tcl $< $@ $(MACRO)
+	magic -rcfile $(MAGIC_RC) -noconsole -dnull scripts/extract_sim.tcl $< $@ $(MACRO)
 
 # gf180 device models + corner setup for ngspice (used by spice/testbench.spice).
 spice/pdk_lib.spice:
@@ -44,6 +45,11 @@ spice/pdk_lib.spice:
 sim: $(TARGET_GDS)
 	bash scripts/sim_ring.sh
 .PHONY: sim
+
+# Post-layout waveform plot for the datasheet (osc_out + /2 /4 /8 taps).
+docs/layout_sim.png plot: $(TARGET_GDS)
+	bash scripts/sim_plot.sh
+.PHONY: plot
 
 # Netgen LVS: layout (magic extraction) vs the intended structural source netlist.
 lvs: $(TARGET_GDS)
