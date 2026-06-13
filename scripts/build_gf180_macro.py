@@ -296,7 +296,7 @@ def build(ring_gds, def_path, out_gds):
             top.add(gdstk.rectangle((x2, py - 0.6), (px, py + 0.6), layer=M4[0], datatype=M4[1]))
         via_m4_m3(top, px, py)
 
-    # --- analog output ua[0] = osc_out_3v3: the ring OSC node drives a SkullFET inverter BUFFER
+    # --- analog output ua[0] = osc_out: the ring OSC node drives a SkullFET inverter BUFFER
     # whose output feeds ua[0] (and, via the ua[0] pin, the divider clock). The buffer isolates
     # the ring from any external load on ua[0] -- a few pF directly on the OSC node otherwise drops
     # the ring frequency 25-60% (see MIGRATION.md). The ring only sees the buffer's gate.
