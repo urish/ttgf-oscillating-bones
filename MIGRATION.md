@@ -45,7 +45,7 @@ die outline, and the skull ring placed in the centre. Emits the matching LEF (co
 - **Post-layout SPICE oscillates and divides.** Extracting the hardened GDS with magic and
   simulating with the gf180mcuD ngspice models (`make sim`), the 21-stage ring oscillates
   **rail-to-rail at ~120 MHz**, and the 8-bit std-cell ripple divider produces clean **/2 .. /256**
-  taps: `uo_out[7]=÷2` ~60 MHz down to `uo_out[0]=÷256` ~0.47 MHz; the buffered raw oscillation is
+  taps: `uo_out[0]=÷2` ~60 MHz up to `uo_out[7]=÷256` ~0.47 MHz; the buffered raw oscillation is
   on `ua[0]`. The testbench supplies **only VDPWR/VGND and the substrate bias** — it does **not**
   force any std-cell rail or device well, so the behaviour reflects the *actual* extracted
   connectivity: every pfet body ties to VDPWR through its n-well tap, every std-cell rail is
@@ -80,11 +80,12 @@ The cells are abutted into a continuous row with **`filltie`** cells between eve
 only as well layers, so without these taps the wells float and the cells don't work).
 
 The DFF's Q sits on the right and CLK on the left, so the ripple chain hops left→right with short
-clock wires and the clock enters at the **left** end. `add_divider` **centres** the row so each
-stage's output fans to the `uo_out` pin at the matching left→right position — the 8 output routes
-therefore **don't cross**. The mapping is `uo_out[0]=÷256` (MSB) .. `uo_out[7]=÷2` (LSB); `osc_out`
-is no longer on a `uo_out` pin (the raw oscillation is on `ua[0]`). Routing discipline: Metal3 =
-horizontal tracks (unique y), Metal4 = vertical risers (unique x). The divider's VDD/VSS rails are
+clock wires and the clock enters at the **left** end. `add_divider` **centres** the row so the
+outputs reach the pin cluster with minimal fan. The mapping is **LSB-first** —
+`uo_out[0]=÷2` .. `uo_out[7]=÷256`; since the stages run left→right (÷2..÷256) but the pins run
+right→left, these output routes **cross**, but the Metal3-track (unique y) / Metal4-riser (unique x)
+discipline keeps every crossing short-free. `osc_out` is no longer on a `uo_out` pin (the raw
+oscillation is on `ua[0]`). The divider's VDD/VSS rails are
 strapped to VDPWR/VGND on filltie columns (straps widened to 0.6 µm, 2-cut vias — cheap EM/IR
 margin). **Watch the strap far-end:** it must use the *die* width (`2*cx`), not the local divider
 width — an early version computed `VDPWR_X` from the divider width and the strap stopped in empty

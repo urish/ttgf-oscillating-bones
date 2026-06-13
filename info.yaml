@@ -3,7 +3,7 @@ project:
   title:        "Oscillating Bones"      # Project title
   author:       "Uri Shaked"      # Your name
   discord:      "urish"      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  "A stylish ring oscillator built from SkullFET transistors"      # One line description of what your project does
+  description:  "A stylish SkullFET ring oscillator (~120 MHz) with an 8-bit /2../256 divider"      # One line description of what your project does
   language:     "Analog" # other examples include Verilog, Amaranth, VHDL, etc
   clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
 
@@ -34,15 +34,15 @@ pinout:
   ui[6]: ""
   ui[7]: ""
 
-  # Outputs
-  uo[0]: "osc_out"
-  uo[1]: "osc_div_2"
-  uo[2]: "osc_div_4"
-  uo[3]: "osc_div_8"
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  # Outputs (8-bit divider, LSB first)
+  uo[0]: "osc_div_2"
+  uo[1]: "osc_div_4"
+  uo[2]: "osc_div_8"
+  uo[3]: "osc_div_16"
+  uo[4]: "osc_div_32"
+  uo[5]: "osc_div_64"
+  uo[6]: "osc_div_128"
+  uo[7]: "osc_div_256"
 
   # Bidirectional pins
   uio[0]: ""

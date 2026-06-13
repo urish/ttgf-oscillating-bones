@@ -34,10 +34,10 @@ def main(out):
     s.append(f"Mbp ua[0] {osc} VDPWR VDPWR pfet_03v3 W={W} L={L}")
     s.append(f"Mbn ua[0] {osc} VGND VGND nfet_03v3 W={W} L={L}")
     # 8-stage toggle-DFF ripple divider clocked by ua[0] (the buffered node the clock taps),
-    # reset by rst_n. Stage j (/2^(j+1)) -> uo_out[7-j]  (uo_out[0]=/256 .. uo_out[7]=/2).
+    # reset by rst_n. Stage j (/2^(j+1)) -> uo_out[j]  (LSB-first: uo_out[0]=/2 .. uo_out[7]=/256).
     prev = "ua[0]"
     for i in range(8):
-        q = f"uo_out[{7 - i}]"
+        q = f"uo_out[{i}]"
         qb = f"qb{i}"
         s.append(f"Xdff{i} {prev} {qb} rst_n {q} VDPWR VGND VDPWR VGND "
                  f"gf180mcu_fd_sc_mcu7t5v0__dffrnq_1")

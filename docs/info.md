@@ -26,17 +26,16 @@ minimum width/spacing/gate rules — see `scripts/remap_to_gf180.py`).
 | Pin       | Signal             | Post-layout frequency |
 |-----------|--------------------|-----------------------|
 | ua[0]     | osc_out_3v3 (buffered raw 3.3V oscillation) | ~120 MHz |
-| uo_out[0] | osc_div_256        | ~0.47 MHz |
-| uo_out[1] | osc_div_128        | ~0.94 MHz |
-| uo_out[2] | osc_div_64         | ~1.9 MHz  |
-| uo_out[3] | osc_div_32         | ~3.7 MHz  |
-| uo_out[4] | osc_div_16         | ~7.5 MHz  |
-| uo_out[5] | osc_div_8          | ~15 MHz   |
-| uo_out[6] | osc_div_4          | ~30 MHz   |
-| uo_out[7] | osc_div_2          | ~60 MHz   |
+| uo_out[0] | osc_div_2          | ~60 MHz   |
+| uo_out[1] | osc_div_4          | ~30 MHz   |
+| uo_out[2] | osc_div_8          | ~15 MHz   |
+| uo_out[3] | osc_div_16         | ~7.5 MHz  |
+| uo_out[4] | osc_div_32         | ~3.7 MHz  |
+| uo_out[5] | osc_div_64         | ~1.9 MHz  |
+| uo_out[6] | osc_div_128        | ~0.94 MHz |
+| uo_out[7] | osc_div_256        | ~0.47 MHz |
 
-(`uo_out[0]` is the MSB / ÷256, `uo_out[7]` the LSB / ÷2 — they're ordered to match the physical
-divider so the output routes don't cross.)
+(`uo_out[0]` is the LSB / ÷2, `uo_out[7]` the MSB / ÷256.)
 
 **Post-layout simulation** (extract the hardened GDS with magic, simulate with the gf180mcuD
 ngspice models — run `make sim`): the ring oscillates **rail-to-rail at ~120 MHz** and the 8-stage
@@ -57,8 +56,8 @@ speed even during reset. Release `rst_n` (high) and the divider starts counting 
 
 ## How to test
 
-Connect an oscilloscope to a low divider tap such as **`uo_out[0]` (÷256, ~0.5 MHz)** or
-**`uo_out[3]` (÷32, ~3.7 MHz)** — scope-friendly. The fast taps and the buffered `ua[0]` (~120 MHz)
+Connect an oscilloscope to a low divider tap such as **`uo_out[7]` (÷256, ~0.5 MHz)** or
+**`uo_out[4]` (÷32, ~3.7 MHz)** — scope-friendly. The fast taps and the buffered `ua[0]` (~120 MHz)
 exceed typical GPIO bandwidth, so the analog pin **`ua[0]`** is the place to look for the raw
 oscillation. Note that `uo_out[0..7]` stay at 0 until you release `rst_n`.
 

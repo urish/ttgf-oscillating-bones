@@ -223,10 +223,12 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     _wire(top, [(rn[0], t_rn), (rn[0], rn[1])], w=0.4, layer=M4)
     _via(top, rn[0], rn[1], [M2, M3, M4])
 
-    # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[N-1-j], each on its own track (no crossing) ---
+    # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[j], i.e. uo_out[0]=/2 (LSB) .. uo_out[7]=/256.
+    # The stages run left->right (/2 .. /256) but the pins run right->left, so these routes cross;
+    # the M3-track (unique y) / M4-riser (unique x) discipline keeps every crossing short-free. ---
     for j in range(N):
         qx, qy = P(f"DIV{2 ** (j + 1)}")
-        pin = f"uo_out[{N - 1 - j}]"
+        pin = f"uo_out[{j}]"
         tx, trk = pin_cx(pin), t_out[j]
         _via(top, qx, qy, [M2, M3, M4]); _wire(top, [(qx, qy), (qx, trk)], w=0.4, layer=M4)
         mvia(qx, trk); _wire(top, [(qx, trk), (tx, trk)], w=0.4, layer=M3)
