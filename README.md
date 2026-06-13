@@ -30,8 +30,9 @@ make lvs      # netgen device/net cross-check
 
 Requires `PDK_ROOT` pointing at a gf180mcuD install and `magic` on `PATH`.
 
-See [`MIGRATION.md`](MIGRATION.md) for the full migration notes, what is validated, and the
-remaining functional finalisation steps.
+See [`DESIGN.md`](DESIGN.md) for how the layout works and why (device recipe, divider/buffer/power
+rationale, what's validated), and [`AGENTS.md`](AGENTS.md) for the build/verify workflow and the
+toolchain.
 
 ## What is Tiny Tapeout?
 

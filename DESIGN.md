@@ -1,14 +1,16 @@
-# Migration notes: IHP sg13g2 → gf180mcu
+# Design notes
 
-This project was migrated from IHP sg13g2 (`ttihp26a`) to **gf180mcuD** for the **ttgf0p3**
-experimental shuttle, using the [ttgf-analog-template](https://github.com/TinyTapeout/ttgf-analog-template)
-conventions and the `tt-support-tools/tech/gf180mcuD/def/analog` frame.
+How **Oscillating Bones** is built on **gf180mcuD** (for the **ttgf0p3** shuttle), and *why* the
+layout is the way it is — the device recipe, the connectivity gotchas we hit, and the divider /
+buffer / power / LVS rationale. For how to build, simulate and verify the repo, see
+[`AGENTS.md`](AGENTS.md).
 
-## Approach
-
-The design is a hand-drawn analog macro (a ring of skull-shaped SkullFET transistors), so this is
-a **layout-level port**, not a config swap. The skull artwork is preserved verbatim; the IHP layer
-stack, device implants and feature sizes are retargeted to gf180mcuD in a pure-Python pipeline.
+The design is a hand-drawn analog macro (a ring of skull-shaped SkullFET transistors) ported at the
+**layout level** from the original IHP sg13g2 version, using the
+[ttgf-analog-template](https://github.com/TinyTapeout/ttgf-analog-template) conventions and the
+`tt-support-tools/tech/gf180mcuD/def/analog` frame. The skull artwork is preserved verbatim; the
+layer stack, device implants and feature sizes are retargeted to gf180mcuD in a pure-Python
+pipeline.
 
 ### The SkullFET device recipe (`scripts/remap_to_gf180.py`)
 

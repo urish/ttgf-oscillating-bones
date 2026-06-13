@@ -150,9 +150,10 @@ def add_ua_buffer(lib, top, pins, osc_xy):
 def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     """Place the N-stage /2../256 std-cell ripple divider centred in the top strip and wire it up.
 
-    Centring makes each stage's output fan to the uo_out pin at the matching left->right position,
-    so the N output routes don't cross: stage j (DIV2^(j+1)) -> uo_out[N-1-j] (so uo_out[0]=/256
-    .. uo_out[N-1]=/2).  M3 = horizontal tracks (unique y), M4 = vertical risers (unique x).
+    Centred under the uo_out pin cluster. Mapping is LSB-first: stage j (DIV2^(j+1)) -> uo_out[j]
+    (uo_out[0]=/2 .. uo_out[N-1]=/256). Stages run left->right but pins run right->left, so these
+    routes cross; the M3-track (unique y) / M4-riser (unique x) discipline keeps crossings
+    short-free.
     """
     pdk_root = os.environ.get("PDK_ROOT", "")
     divcell, dp, std_cells = BD.build_divider(BD.STD_GDS_DEFAULT, pdk_root)
@@ -299,7 +300,7 @@ def build(ring_gds, def_path, out_gds):
     # --- analog output ua[0] = osc_out: the ring OSC node drives a SkullFET inverter BUFFER
     # whose output feeds ua[0] (and, via the ua[0] pin, the divider clock). The buffer isolates
     # the ring from any external load on ua[0] -- a few pF directly on the OSC node otherwise drops
-    # the ring frequency 25-60% (see MIGRATION.md). The ring only sees the buffer's gate.
+    # the ring frequency 25-60% (see DESIGN.md). The ring only sees the buffer's gate.
     osc_xy = None
     for lb in ring.labels:
         if lb.text == "OSC":

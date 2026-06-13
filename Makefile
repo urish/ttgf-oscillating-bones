@@ -3,7 +3,7 @@
 
 MACRO := tt_um_oscillating_bones
 # The committed gf180 skull-ring artwork. It was produced one-time by remapping the original IHP
-# sg13g2 layout (see `make remap` + MIGRATION.md); the IHP source GDS has been removed now that the
+# sg13g2 layout (see `make remap` + DESIGN.md); the IHP source GDS has been removed now that the
 # migration is complete, so ring_gf180.gds is the canonical source the build starts from.
 RING_GDS   := gds/ring_gf180.gds
 TARGET_GDS := gds/$(MACRO).gds
