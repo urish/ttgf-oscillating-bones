@@ -94,7 +94,16 @@ pin order. `add_divider` **centres** the row so the outputs reach the pin cluste
 The mapping is **LSB-first** — `uo_out[0]=÷2` .. `uo_out[7]=÷256`; because the mirror puts the stage
 order in the same direction as the pin order, the eight output routes **fan straight down without
 crossing** (the Metal3-track / Metal4-riser discipline still guards every remaining crossing — e.g.
-the supply taps — but the divider taps themselves no longer cross). The mirror also frees the right
+the supply taps — but the divider taps themselves no longer cross). Each tap is `Q → riser → Metal3
+jog (at its own horizontal track) → Metal4 pin-riser → pin`; the jog has to be Metal3 (it crosses
+other taps' Metal4 pin-risers) and the pin-riser has to be Metal4 (it climbs past higher Metal3
+jogs), but the short **flop-side** riser is kept on Metal3 rather than hopping up to Metal4 only to
+drop straight back. That is possible because the eight horizontal tracks are not assigned in pin
+order but **topologically ordered**: whenever one tap's flop sits under another's jog, the covering
+jog is placed on a higher track, so no flop riser ever climbs through a jog. (For this fan that means
+`uo_out[0]`'s jog sits *above* `uo_out[1]`/`[2]`'s.) The one obstacle a track order can't move is the
+VDD strap — so VDD is tapped at the leftmost filltie, keeping its strap clear of every flop. The
+mirror also frees the right
 edge: the clock rises up it from the buffered `ua[0]` node and lands on the (now right-hand) CLK pin
 directly — CLK and the reset `RN` both sit in the **clear channel just below the row** (between the
 row at y≈300 and the ring top at y≈293), so the clock jogs across there and never excursions above

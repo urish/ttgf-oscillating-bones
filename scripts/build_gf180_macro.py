@@ -209,8 +209,12 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     ties = [DX0 + W - (BD.CAP_W + BD.DFF_W + BD.TIE_W + BD.INV_W + BD.TIE_W / 2
             + j * (BD.DFF_W + 2 * BD.TIE_W + BD.INV_W)) for j in range(N)]
 
-    # --- power: VSS rail -> VGND stripe, VDD rail -> VDPWR stripe (both on the left edge) ---
-    vss_tap, vdd_tap = ties[-1], ties[-2]
+    # --- power: VSS rail -> VGND stripe, VDD rail -> VDPWR stripe (both on the left edge). Tap VDD
+    # at the LEFTMOST filltie (ties[-1]) so its M3 strap (run at the row's TOP rail, y=rail_vdd) sits
+    # to the left of every divider-output flop -- otherwise it lies under the /256 flop riser and
+    # forces that riser onto M4. VSS taps the next column; its strap runs at y=rail_vss=300, BELOW
+    # the flop risers (which start at the Q row, y~303), so it is never in their way. ---
+    vss_tap, vdd_tap = ties[-2], ties[-1]
     beefy(vss_tap, rail_vss, [M1, M2, M3])
     _wire(top, [(vss_tap, rail_vss), (VGND_X, rail_vss)], w=PW, layer=M3)
     beefy(VGND_X, rail_vss, [M3, M4])
@@ -218,9 +222,9 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     _wire(top, [(vdd_tap, rail_vdd), (VDPWR_X, rail_vdd)], w=PW, layer=M3)
     beefy(VDPWR_X, rail_vdd, [M3, M4])
 
-    # track plan: N output tracks above the row; clock and reset share the clear channel BELOW the
-    # row (between the row at y=300 and the ring top at ~293) — both CLK and RN sit just below the row
-    t_out = [DY0 + 6.0 + 2.0 * j for j in range(N)]     # 306 .. 320
+    # track plan: N output tracks above the row (their order is solved below so flop risers don't
+    # cross); clock and reset share the clear channel BELOW the row (between the row at y=300 and the
+    # ring top at ~293) — both CLK and RN sit just below the row
     t_clk = DY0 - 3.0                                    # 297 (channel below the row, next to CLK)
     t_rn = DY0 - 5.0                                     # 295 (same channel, clear of t_clk)
 
@@ -232,32 +236,52 @@ def add_divider(lib, top, pins, cx, cy, H, osc_xy):
     ck = P("CLK")
     _wire(top, [(tapx, 0.5), (tapx, t_clk)], w=0.4, layer=M4)
     mvia(tapx, t_clk); _wire(top, [(tapx, t_clk), (ck[0], t_clk)], w=0.4, layer=M3)
-    mvia(ck[0], t_clk); _wire(top, [(ck[0], t_clk), (ck[0], ck[1])], w=0.4, layer=M4)
-    _via(top, ck[0], ck[1], [M2, M3, M4])
+    # CLK is only ~1um above the track in the clear channel — finish the short hop on M3, no M4 bounce
+    _wire(top, [(ck[0], t_clk), (ck[0], ck[1])], w=0.4, layer=M3)
+    _via(top, ck[0], ck[1], [M2, M3])
 
     # --- reset: rst_n pin -> RN, in the channel BELOW the row (clear of the outputs) ---
     rn = P("RN"); rx = pin_cx("rst_n")
     _wire(top, [(rx, pinrect["rst_n"][1]), (rx, t_rn)], w=0.4, layer=M4); mvia(rx, t_rn)
-    _wire(top, [(rx, t_rn), (rn[0], t_rn)], w=0.4, layer=M3); mvia(rn[0], t_rn)
-    _wire(top, [(rn[0], t_rn), (rn[0], rn[1])], w=0.4, layer=M4)
-    _via(top, rn[0], rn[1], [M2, M3, M4])
+    _wire(top, [(rx, t_rn), (rn[0], t_rn)], w=0.4, layer=M3)
+    # RN is just above the track in the clear channel — finish on M3, no M4 bounce
+    _wire(top, [(rn[0], t_rn), (rn[0], rn[1])], w=0.4, layer=M3)
+    _via(top, rn[0], rn[1], [M2, M3])
 
-    # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[j] (uo_out[0]=/2 .. uo_out[7]=/256). With the
-    # mirror the stage order matches the pin order, so the eight routes fan without crossing.
-    # Each route is Q -> riser -> M3 jog (at its own track) -> M4 riser -> pin. The jog MUST be on
-    # M3: it crosses other outputs' M4 pin-risers, and the pins are on M4. The PIN-side riser must be
-    # M4 (it climbs past higher M3 tracks). The FLOP-side riser, though, only needs M4 where its short
-    # climb would clip a lower track or the vdd strap (M3); everywhere else it stays on M3 straight
-    # from Q to its track -- no needless M4 hop. We compute that per output so it self-adjusts. ---
+    # --- N outputs: stage j (DIV2^(j+1)) -> uo_out[j] (uo_out[0]=/2 .. uo_out[7]=/256). Each route
+    # is Q -> riser -> M3 jog (at its own track) -> M4 pin-riser -> pin. The jog MUST be M3 (it
+    # crosses other outputs' M4 pin-risers, and the pins are M4); the PIN-side riser MUST be M4 (it
+    # climbs past higher M3 jogs). The FLOP-side riser we want on M3 — going up to M4 only to drop
+    # straight back to M3 for the jog is a wasted hop. It can stay on M3 as long as its short climb
+    # clears every lower jog. Whether it does is purely a question of TRACK ORDER: if flop a sits
+    # under jog b, b's track must be above a's, so a's riser stops before reaching b. Those "a under
+    # b" relations form a DAG for this fan, so a topological sort gives an order with ZERO flop-riser
+    # crossings — every flop riser stays on M3. (flop_needs_m4 remains as a safety net: a cycle, or
+    # the vdd strap, would fall back to M4 rather than short.) ---
     qxs = {j: P(f"DIV{2 ** (j + 1)}")[0] for j in range(N)}
     txs = {j: pin_cx(f"uo_out[{j}]") for j in range(N)}
     span = {j: (min(qxs[j], txs[j]), max(qxs[j], txs[j])) for j in range(N)}
-    vdd_strap = (min(VDPWR_X, vdd_tap), max(VDPWR_X, vdd_tap))   # M3 strap at rail_vdd (303.9)
-    m = 0.5                                                      # clearance margin before forcing M4
+    m = 0.5                                                      # clearance margin
 
+    # order the tracks bottom->top so no flop riser crosses a lower output's jog
+    under = {a: [b for b in range(N) if b != a and span[b][0] - m <= qxs[a] <= span[b][1] + m]
+             for a in range(N)}                                 # b's jog covers a's flop -> b above a
+    indeg = {b: sum(b in under[a] for a in range(N)) for b in range(N)}
+    ready = sorted(j for j in range(N) if indeg[j] == 0)
+    order = []
+    while ready:
+        n = ready.pop(0); order.append(n)
+        for b in under[n]:
+            indeg[b] -= 1
+            if indeg[b] == 0:
+                ready = sorted(ready + [b])
+    order += [j for j in range(N) if j not in order]            # cycle remnants (none for this fan)
+    t_out = {out: DY0 + 6.0 + 2.0 * i for i, out in enumerate(order)}
+
+    vdd_strap = (min(VDPWR_X, vdd_tap), max(VDPWR_X, vdd_tap))   # M3 strap at rail_vdd
     def flop_needs_m4(j):
-        """True if the flop-side riser at qxs[j] (climbing 303 -> t_out[j]) would touch any lower
-        output's M3 track or the vdd M3 strap (both sit between the row and t_out[j])."""
+        """True only if the flop riser at qxs[j] (303 -> t_out[j]) still meets M3: the vdd strap, or
+        a lower jog the track order couldn't lift clear (would only happen on a constraint cycle)."""
         if vdd_strap[0] - m <= qxs[j] <= vdd_strap[1] + m:
             return True
         return any(t_out[k] < t_out[j] and span[k][0] - m <= qxs[j] <= span[k][1] + m
