@@ -85,33 +85,41 @@ METAL_LAYERS = [(34, 0), (36, 0), (42, 0), (46, 0)]   # Metal1..Metal4
 
 
 def slot_wide_metal(cell, max_solid=30.0, slot_w=2.0):
-    """gf180 MSLOT.1: solid metal wider than 30um (in BOTH directions) must be slotted to relieve
-    CMP dishing. Cut `slot_w`-wide holes, on a (max_solid-2)um pitch grid, ONLY over the wide cores
-    (the skull's solid cranium) so thin skull features are untouched. Holes in same-net metal are
-    not a spacing concern; remaining strips stay ~26um (< 30um, > the 10um min)."""
-    pitch = max_solid - slot_w
+    """gf180 MSLOT.1: solid metal wider than 30um in BOTH directions must be slotted (CMP dishing).
+    The rule's opening removes any metal that is <=30um in EITHER direction, so slotting ONE
+    direction is sufficient -- a *single* set of parallel slots, NOT a cross. To keep the visual
+    impact on the skull minimal we cut the fewest slots (only over the wide cores, so thin skull
+    features are untouched) along whichever axis needs fewer, leaving solid strips <=30um."""
+    r = max_solid / 2.0
     for lay in METAL_LAYERS:
         polys = [p for p in cell.polygons if (p.layer, p.datatype) == lay]
         if not polys:
             continue
-        r = max_solid / 2.0
         wide = gdstk.offset(gdstk.offset(polys, -r, join="miter", use_union=True),
-                            r + slot_w, join="miter", use_union=True)   # cores grown back + margin
+                            r, join="miter", use_union=True)        # opening: the >30um-wide cores
         if not wide:
             continue
         pts = [pt for p in wide for pt in p.points]
         bx0 = min(p[0] for p in pts); bx1 = max(p[0] for p in pts)
         by0 = min(p[1] for p in pts); by1 = max(p[1] for p in pts)
+        W, H = bx1 - bx0, by1 - by0
+        # slots needed to cut a span E into solid strips <= max_solid (n+1 strips, n slots):
+        need = lambda E: max(0, -(-int((E - max_solid) * 1000) // int((max_solid + slot_w) * 1000)))
+        nx, ny = need(W), need(H)
         slots = []
-        x = bx0 + pitch
-        while x < bx1:
-            slots.append(gdstk.rectangle((x - slot_w / 2, by0 - 1), (x + slot_w / 2, by1 + 1)))
-            x += pitch
-        y = by0 + pitch
-        while y < by1:
-            slots.append(gdstk.rectangle((bx0 - 1, y - slot_w / 2), (bx1 + 1, y + slot_w / 2)))
-            y += pitch
-        holes = gdstk.boolean(slots, wide, "and")            # slot only the wide cores
+        if ny and (nx == 0 or ny <= nx):                            # horizontal slots cut the height
+            step = H / (ny + 1)
+            for k in range(1, ny + 1):
+                y = by0 + k * step
+                slots.append(gdstk.rectangle((bx0 - 1, y - slot_w / 2), (bx1 + 1, y + slot_w / 2)))
+        elif nx:                                                    # vertical slots cut the width
+            step = W / (nx + 1)
+            for k in range(1, nx + 1):
+                x = bx0 + k * step
+                slots.append(gdstk.rectangle((x - slot_w / 2, by0 - 1), (x + slot_w / 2, by1 + 1)))
+        if not slots:
+            continue
+        holes = gdstk.boolean(slots, wide, "and")                   # slot only the wide cores
         slotted = gdstk.boolean(polys, holes, "not")
         cell.remove(*polys)
         for p in slotted:
