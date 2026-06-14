@@ -13,22 +13,28 @@ The gf180 skull ring (`gds/ring_gf180.gds`) is committed as the source artwork; 
 assembled from it by a pure-Python pipeline (no interactive layout needed):
 
 ```
-make all      # assemble the macro (GDS + LEF) from gds/ring_gf180.gds
-make drc      # magic sign-off DRC (0 violations)
-make sim      # post-layout ngspice: ring + 8-bit /2../256 divider
-make lvs      # netgen device/net cross-check
+make all          # assemble the macro (GDS + LEF) from gds/ring_gf180.gds
+make drc_klayout  # KLayout FEOL/BEOL/conn sign-off DRC (0 real violations)
+make drc          # magic DRC (weaker quick check — no off-grid / exact-cut / slot)
+make sim          # post-layout ngspice: ring + 8-bit /2../256 divider
+make lvs          # netgen device/net cross-check
 ```
 
 - `scripts/build_gf180_macro.py` — assembles the full `tt_um_oscillating_bones` macro from the
   TT analog DEF frame (pins + power stripes) with the skull ring placed in the centre and a gf180
   std-cell 8-bit /2../256 divider (`scripts/build_divider.py`), and emits the matching LEF.
 - `scripts/render_layout.py` — renders the GDS to a PNG.
+- `scripts/sanitize_gf180.py` — grid-snap + exact-cut + implant-merge sign-off pass for an
+  already-remapped gf180 cell; used to produce `gds/skull_buffer.gds` from the hand-built
+  (centred-at-origin) buffer without re-centring it (the macro's BUF_* pin offsets depend on it).
 - `scripts/remap_to_gf180.py` — the one-time IHP sg13g2 → gf180mcuD migration that produced
   `ring_gf180.gds` (3.3V devices, implants/n-well taps regenerated from the original p-select,
-  1.45× scale). The IHP source GDS has been removed post-migration; to re-run it against a fresh
-  IHP source: `make remap IHP_SRC=path/to/ihp_source.gds`.
+  1.45× scale, plus the grid-snap / exact-cut / implant-merge / metal-slot sign-off passes). The IHP
+  source GDS has been removed post-migration; to re-run it against a fresh IHP source:
+  `make remap IHP_SRC=path/to/ihp_source.gds`.
 
-Requires `PDK_ROOT` pointing at a gf180mcuD install and `magic` on `PATH`.
+Requires `PDK_ROOT` pointing at a gf180mcuD install, and `magic` (DRC/extract/LVS) plus `klayout`
+(sign-off DRC) on `PATH`.
 
 See [`DESIGN.md`](DESIGN.md) for how the layout works and why (device recipe, divider/buffer/power
 rationale, what's validated), and [`AGENTS.md`](AGENTS.md) for the build/verify workflow and the

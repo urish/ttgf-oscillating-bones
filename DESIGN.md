@@ -29,10 +29,13 @@ pipeline.
   the implants off Nwell membership (p+ for all COMP in the Nwell), which buried those taps under
   Pplus and left all 21 pfet bodies floating — the design still oscillated (junction-biased), but
   the bodies weren't tied. Honoring pSD restores the taps (every pfet body extracts to VDPWR).
-- **1.45× uniform scale** — the minimum that clears every 180nm width/spacing/cut rule.
+- **1.45× uniform scale** — the minimum that clears every 180nm width/spacing/**gate** rule. (It
+  does *not* by itself clear the grid/cut/slot rules: the scale pushes vertices off the 5 nm grid and
+  makes the cuts the wrong size, which the grid-snap, exact-cut-rebuild and slotting passes below fix.)
 
-Result: the full skull ring (21 inverters + central skull + power rings) remaps to a
-**261 × 261 µm, 0-DRC-violation** block.
+Result: the full skull ring (21 inverters + central skull + power rings) remaps to a **261 × 261 µm**
+block that is KLayout sign-off-clean (0 real violations) once the grid-snap, exact-cut and
+metal-slot passes below are applied.
 
 ### Macro assembly (`scripts/build_gf180_macro.py`)
 
@@ -86,8 +89,10 @@ With the divider mirrored, the clock riser now climbs the free **right** edge to
 never touches the left-side connectors. Verified after the move: VGND and VDPWR remain separate
 nets, every ring pfet body + std-cell rail stays tied, nothing floats.
 
-The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module) and run
-in CI; magic DRC runs clean locally.
+The KLayout FEOL/BEOL/offgrid/antenna decks need the KLayout binary (not the Python module); locally
+it is provided via a nix-portable wrapper (`~/bin/klayout`, mirroring `~/bin/magic`), so `make
+drc_klayout` runs the full sign-off deck locally as well as in CI. Magic DRC also runs clean locally
+but is the weaker check.
 
 ## The 8-bit /2../256 divider (`scripts/build_divider.py`)
 

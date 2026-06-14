@@ -14,23 +14,28 @@ GDS**, assembled by Python; `src/project.v` is only the black-box pin interface.
 ## Build & verify
 
 ```
-make all      # assemble gds/ + lef/ from gds/ring_gf180.gds (the committed artwork)
-make drc      # magic sign-off DRC — must report 0
-make sim      # post-layout ngspice: ring frequency + /2../256 divider
-make plot     # regenerate docs/layout_sim.png (waveforms)
-make lvs      # netgen device/net cross-check
+make all          # assemble gds/ + lef/ from gds/ring_gf180.gds (the committed artwork)
+make drc_klayout  # AUTHORITATIVE KLayout FEOL/BEOL/conn sign-off DRC — 0 real violations
+make drc          # magic DRC (weaker quick check: no off-grid / exact-cut / slot checks)
+make sim          # post-layout ngspice: ring frequency + /2../256 divider
+make plot         # regenerate docs/layout_sim.png (waveforms)
+make lvs          # netgen device/net cross-check
 ```
 
 The authoritative gate (also run in CI) is the Tiny Tapeout precheck:
 `tt-support-tools/precheck/precheck.py` structural checks (boundary / layer / power-pin / analog-pin
-/ pin) + the KLayout DRC decks. **After any layout change, re-run `make drc` (must be 0), `make sim`,
-and the precheck**, and confirm nothing floats (see rules below).
+/ pin) + the KLayout DRC decks. **After any layout change, re-run `make drc_klayout` (0 real
+violations — only the 7 die-level density rules may remain), `make sim`, and the precheck**, and
+confirm nothing floats (see rules below). (`make drc` / magic DRC is a useful quick local check but
+is weaker — it does not verify the 5 nm grid, exact cut sizes, or metal slotting, which is exactly
+the class of bug that hid behind a clean magic DRC once already.)
 
 ## Toolchain (this environment)
 
-- **No system `magic` / `netgen` / `klayout` binary.** `magic` and `netgen` run via `nix-portable`
-  wrappers at `~/bin/magic` / `~/bin/netgen` (realized from the fossi cache). `klayout` is the
-  **python module** only (`pya`); the KLayout-DSL DRC decks need the binary and run in CI.
+- **No system `magic` / `netgen` / `klayout` binary.** All three run via `nix-portable` wrappers at
+  `~/bin/magic` / `~/bin/netgen` / `~/bin/klayout` (realized from the fossi cache). `~/bin/klayout`
+  is the real KLayout binary, so `make drc_klayout` runs the full KLayout-DSL FEOL/BEOL/conn sign-off
+  deck locally (the `pya` python module is also importable for scripting).
 - **PDK**: gf180mcuD installed via ciel — set `PDK_ROOT` to the ciel `.../versions/<hash>` dir and
   `PDK=gf180mcuD` (the magicrc, ngspice models and DRC decks live under there).
 - Also available: `gdstk`, `ngspice`, `numpy`, `matplotlib`, `librelane`.
@@ -40,12 +45,14 @@ and the precheck**, and confirm nothing floats (see rules below).
 - `gds/ring_gf180.gds` — **the committed source artwork** (the remapped gf180 skull ring); the build
   starts here. The IHP source was removed post-migration; `make remap IHP_SRC=<ihp.gds>` regenerates
   it via `scripts/remap_to_gf180.py`.
-- `gds/skull_buffer.gds` — the committed single-skull buffer cell (one remapped inverter).
+- `gds/skull_buffer.gds` — the committed single-skull buffer cell (one remapped inverter),
+  grid/cut-sanitized via `scripts/sanitize_gf180.py`. It stays **centred at origin** — the macro's
+  `BUF_*` pin offsets in `build_gf180_macro.py` depend on that frame, so don't re-centre it.
 - `scripts/build_gf180_macro.py` — assembles the macro: DEF frame + Metal4 pins + left-edge power
   stripes + placed ring + `add_ua_buffer` (ua[0] buffer) + `add_divider` (8-bit divider); emits the LEF.
 - `scripts/build_divider.py` — the std-cell divider row (`dffrnq_1` + `inv_2` toggle stages, with
   `filltie`/`endcap` for the well taps).
-- helpers: `scripts/{remap_to_gf180,render_layout,plot_wave,gen_lvs_source}.py`,
+- helpers: `scripts/{remap_to_gf180,sanitize_gf180,render_layout,plot_wave,gen_lvs_source}.py`,
   `scripts/{sim_ring,sim_plot,run_lvs}.sh`, `scripts/extract_{sim,lvs}.tcl`.
 
 ## Rules you must not break

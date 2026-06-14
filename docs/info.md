@@ -19,7 +19,8 @@ This is the **gf180mcu** (GlobalFoundries 180nm) port of the design, migrated fr
 IHP sg13g2 version. The SkullFETs are **3.3V devices** running directly on the 3.3V core supply
 (VDPWR). The skull artwork is preserved verbatim from the original; only the layer stack, device
 implants and feature sizes were retargeted to gf180mcuD (a uniform 1.45× scale clears the 180nm
-minimum width/spacing/gate rules — see `scripts/remap_to_gf180.py`).
+width/spacing/gate rules; grid-snap, exact-cut and metal-slot passes then make it KLayout
+sign-off-clean — see `scripts/remap_to_gf180.py`).
 
 ![Layout](layout.png)
 
