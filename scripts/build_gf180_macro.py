@@ -107,6 +107,40 @@ def _via(cell, x, y, layers, m1=True):
         cell.add(gdstk.rectangle((x - s, y - s), (x + s, y + s), layer=cut[0], datatype=cut[1]))
 
 
+def _snap_top_grid(cell):
+    """Snap every polygon/label drawn directly in this (top) cell to the 5nm grid. The placed
+    ring/buffer/std-cell REFERENCES are not touched (already on-grid; the DEF pin rects are too, so
+    this is a no-op for them)."""
+    g = 0.005
+    snap = lambda v: round(v / g) * g
+    old = list(cell.polygons)
+    new = [gdstk.Polygon([(snap(x), snap(y)) for x, y in p.points], layer=p.layer, datatype=p.datatype)
+           for p in old]
+    cell.remove(*old)
+    for p in new:
+        cell.add(p)
+    for lb in cell.labels:
+        lb.origin = (snap(lb.origin[0]), snap(lb.origin[1]))
+
+
+def _exactify_vias(cell):
+    """gf180 V*.1 requires every via to be an EXACT 0.26um square. Snapping wire-drawn cuts to the
+    5nm grid can drift their size, so rebuild each top-level via cut (Via1/2/3) as a 0.26 square
+    centred on the grid. Contacts only live inside the placed cells (already clean), not here."""
+    g = 0.005
+    snap = lambda v: round(v / g) * g
+    cuts = [p for p in cell.polygons if (p.layer, p.datatype) in (VIA1, VIA2, VIA3)]
+    spec = []
+    for p in cuts:
+        xs = p.points[:, 0]; ys = p.points[:, 1]
+        spec.append(((p.layer, p.datatype), snap((xs.min() + xs.max()) / 2),
+                     snap((ys.min() + ys.max()) / 2)))
+    cell.remove(*cuts)
+    for (lay, cx, cy) in spec:
+        s = VIA_SZ / 2
+        cell.add(gdstk.rectangle((cx - s, cy - s), (cx + s, cy + s), layer=lay[0], datatype=lay[1]))
+
+
 SKULL_BUFFER_GDS = os.path.join(os.path.dirname(__file__), "..", "gds", "skull_buffer.gds")
 # pin offsets relative to the placed skull-buffer origin (from the remapped cell)
 BUF_A = (5.0, 0.29)         # input A  (land on the cell's Metal2 A-pad, clear of its gate vias)
@@ -383,6 +417,16 @@ def build(ring_gds, def_path, out_gds):
     # tie unused output pins (uio_out[0..7], uio_oe[0..7]) low
     tie_unused_low(top, pins, H)
 
+    # gf180 sign-off geometry: snap this script's own routing to the 5nm grid and rebuild every
+    # top-level via as an EXACT 0.26um square centred on-grid. Only the TOP cell is touched -- the
+    # placed ring/buffer/std cells are already grid- and cut-clean, and re-snapping (or changing the
+    # library precision) would perturb the PDK std cells enough that magic stops recognising them.
+    _snap_top_grid(top)
+    _exactify_vias(top)
+    # Write at the STANDARD 1nm database precision. All geometry is already on the 5nm grid, so this
+    # stays grid-clean -- but a 5nm file precision (inherited from reading the 5nm ring) makes magic
+    # mis-read the PDK std cells and flatten them (LVS device-count blow-up), so force 1nm here.
+    lib.precision = 1e-9
     lib.write_gds(out_gds)
     bb = top.bounding_box()
     print(f"wrote {out_gds}: tt_um_oscillating_bones {bb[1][0]-bb[0][0]:.2f} x {bb[1][1]-bb[0][1]:.2f} um, "

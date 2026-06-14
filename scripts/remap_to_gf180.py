@@ -17,7 +17,20 @@ Usage: remap_to_gf180.py <in.gds> <out.gds> [top_cell] [scale]
 import sys
 import gdstk
 
-SCALE = 1.45  # min uniform scale that is DRC-clean for the 3.3V SkullFET
+SCALE = 1.45  # min uniform scale that clears the 3.3V SkullFET width/spacing/gate rules
+
+# gf180 manufacturing grid + FIXED cut sizes. The 1.45x scale puts geometry on a 1nm grid (not the
+# 5nm grid) and turns the cut squares into the wrong size (IHP 0.16 contact -> 0.232, IHP via ->
+# 0.275). gf180 requires every vertex on the 5nm grid (OFFGRID checks) and every cut an EXACT
+# square: Contact 0.22 (CO.1), Via1/2/3 0.26 (V*.1). So after scaling we snap to the grid (via the
+# output library precision) and rebuild every cut at its exact size centred on-grid -- the scaled
+# metal/diffusion enclosure only grows, so the smaller exact cut still clears CO.3/CO.4/V*.3.
+GRID = 0.005
+CUT_SIZE = {(33, 0): 0.22, (35, 0): 0.26, (38, 0): 0.26, (40, 0): 0.26, (41, 0): 0.26}
+
+
+def _snap(v):
+    return round(v / GRID) * GRID
 
 # IHP (layer,dt) -> gf180mcuD (layer,dt) for layers copied verbatim.
 # gf180 usable routing metals are Metal1-4 only (Metal5/81 is forbidden, MetalTop
@@ -63,6 +76,9 @@ DROP = {(14, 0), (30, 23), (160, 0), (189, 4),
 COMP, NWELL, PPLUS, NPLUS, LVPWELL = (22, 0), (21, 0), (31, 0), (32, 0), (204, 0)
 IMPLANT_ENC = 0.16   # Nplus/Pplus enclosure of COMP
 NWELL_GROW = 0.30    # extra Nwell margin so DF.7 (nwell overlap of pdiff, 0.43) clears
+IMPLANT_CLOSE = 0.16  # morph-close radius (unscaled): merge same-type implant gaps < 2*0.16*1.45 =
+                      # 0.46um (>the NP.2/PP.2 0.4um min spacing) so abutting inverters' Nplus/Pplus
+                      # become one region instead of leaving sub-0.4um slivers between them.
 
 
 def _polys(shapes, layer, datatype):
@@ -92,10 +108,19 @@ def regen_implants(comp_shapes, nwell_shapes, psd_shapes):
     # LVPWELL belongs only under the NMOS (n+ COMP OUTSIDE the Nwell); the n+ n-well taps,
     # which sit inside the Nwell, must NOT get LVPWELL.
     nmos = gdstk.boolean(ncomp, nwell, "not") if (ncomp and nwell) else ncomp
+    def _enc_close(comp_region):
+        """Enclose COMP by IMPLANT_ENC, then morph-close so same-type regions closer than the
+        NP.2/PP.2 min spacing merge into one (no sub-0.4um slivers)."""
+        if not comp_region:
+            return []
+        enc = gdstk.offset(comp_region, IMPLANT_ENC, join="miter", use_union=True)
+        grown = gdstk.offset(enc, IMPLANT_CLOSE, join="miter", use_union=True)
+        return gdstk.offset(grown, -IMPLANT_CLOSE, join="miter", use_union=True)
+
     out = []
-    for p in gdstk.offset(pcomp, IMPLANT_ENC, join="miter") if pcomp else []:
+    for p in _enc_close(pcomp):
         out.append(gdstk.Polygon(p.points, layer=PPLUS[0], datatype=PPLUS[1]))
-    for p in gdstk.offset(ncomp, IMPLANT_ENC, join="miter") if ncomp else []:
+    for p in _enc_close(ncomp):
         out.append(gdstk.Polygon(p.points, layer=NPLUS[0], datatype=NPLUS[1]))
     for p in gdstk.offset(nmos, 0.45, join="miter") if nmos else []:
         out.append(gdstk.Polygon(p.points, layer=LVPWELL[0], datatype=LVPWELL[1]))
@@ -128,7 +153,7 @@ def remap_flat(in_gds, top_name, scale=SCALE):
 
     implants = regen_implants(comp_src, nwell_src, psd_src)
 
-    out = gdstk.Library()
+    out = gdstk.Library(unit=1e-6, precision=GRID * 1e-6)   # write rounds every coord to the 5nm grid
     nc = out.new_cell(top_name)
     for p in kept + implants:
         p.scale(scale)
@@ -168,6 +193,24 @@ def remap_flat(in_gds, top_name, scale=SCALE):
         if tgt:
             nc.add(gdstk.Label(lb.text, (lb.origin[0] * scale, lb.origin[1] * scale),
                                layer=tgt[0], texttype=tgt[1]))
+
+    # --- gf180 sign-off geometry fix: rebuild every contact/via as an EXACT fixed-size square,
+    # centred on the 5nm grid (CO.1 / V*.1 require an exact cut size; the 1.45x scale made them the
+    # wrong size). Bulk geometry is snapped to grid by the library precision set above. ---
+    cuts = [p for p in nc.polygons if (p.layer, p.datatype) in CUT_SIZE]
+    centres = []
+    for p in cuts:
+        xs = p.points[:, 0]; ys = p.points[:, 1]
+        w, h = xs.max() - xs.min(), ys.max() - ys.min()
+        if max(w, h) > 0.40:        # guard: a real cut is a single small square, not a bar/array
+            raise SystemExit(f"remap: {(p.layer, p.datatype)} cut is {w:.3f}x{h:.3f}um — "
+                             "looks like a bar; would need array fill, not 1:1 replacement")
+        centres.append(((p.layer, p.datatype), _snap((xs.min() + xs.max()) / 2),
+                        _snap((ys.min() + ys.max()) / 2)))
+    nc.remove(*cuts)
+    for (lay, cx, cy) in centres:
+        s = CUT_SIZE[lay] / 2
+        nc.add(gdstk.rectangle((cx - s, cy - s), (cx + s, cy + s), layer=lay[0], datatype=lay[1]))
     return out
 
 
