@@ -81,6 +81,43 @@ IMPLANT_CLOSE = 0.16  # morph-close radius (unscaled): merge same-type implant g
                       # become one region instead of leaving sub-0.4um slivers between them.
 
 
+METAL_LAYERS = [(34, 0), (36, 0), (42, 0), (46, 0)]   # Metal1..Metal4
+
+
+def slot_wide_metal(cell, max_solid=30.0, slot_w=2.0):
+    """gf180 MSLOT.1: solid metal wider than 30um (in BOTH directions) must be slotted to relieve
+    CMP dishing. Cut `slot_w`-wide holes, on a (max_solid-2)um pitch grid, ONLY over the wide cores
+    (the skull's solid cranium) so thin skull features are untouched. Holes in same-net metal are
+    not a spacing concern; remaining strips stay ~26um (< 30um, > the 10um min)."""
+    pitch = max_solid - slot_w
+    for lay in METAL_LAYERS:
+        polys = [p for p in cell.polygons if (p.layer, p.datatype) == lay]
+        if not polys:
+            continue
+        r = max_solid / 2.0
+        wide = gdstk.offset(gdstk.offset(polys, -r, join="miter", use_union=True),
+                            r + slot_w, join="miter", use_union=True)   # cores grown back + margin
+        if not wide:
+            continue
+        pts = [pt for p in wide for pt in p.points]
+        bx0 = min(p[0] for p in pts); bx1 = max(p[0] for p in pts)
+        by0 = min(p[1] for p in pts); by1 = max(p[1] for p in pts)
+        slots = []
+        x = bx0 + pitch
+        while x < bx1:
+            slots.append(gdstk.rectangle((x - slot_w / 2, by0 - 1), (x + slot_w / 2, by1 + 1)))
+            x += pitch
+        y = by0 + pitch
+        while y < by1:
+            slots.append(gdstk.rectangle((bx0 - 1, y - slot_w / 2), (bx1 + 1, y + slot_w / 2)))
+            y += pitch
+        holes = gdstk.boolean(slots, wide, "and")            # slot only the wide cores
+        slotted = gdstk.boolean(polys, holes, "not")
+        cell.remove(*polys)
+        for p in slotted:
+            cell.add(gdstk.Polygon(p.points, layer=lay[0], datatype=lay[1]))
+
+
 def _polys(shapes, layer, datatype):
     return [gdstk.Polygon(p.points, layer=layer, datatype=datatype) for p in shapes]
 
@@ -221,6 +258,8 @@ def remap_flat(in_gds, top_name, scale=SCALE):
     for (lay, cx, cy) in centres:
         s = CUT_SIZE[lay] / 2
         nc.add(gdstk.rectangle((cx - s, cy - s), (cx + s, cy + s), layer=lay[0], datatype=lay[1]))
+
+    slot_wide_metal(nc)     # MSLOT.1: slot the skull's wide solid metal (>30um)
     return out
 
 

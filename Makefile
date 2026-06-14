@@ -63,10 +63,16 @@ drc: $(TARGET_GDS)
 		magic -rcfile $(MAGIC_RC) -noconsole -dnull
 .PHONY: drc
 
-# KLayout FEOL/BEOL DRC (as run in CI precheck). Report goes to the (gitignored) drc/ dir.
+# Full KLayout FEOL/BEOL/connectivity sign-off DRC (the authoritative gf180 deck — catches
+# off-grid / exact-cut / slotting that magic DRC does not). Report goes to the (gitignored) drc/
+# dir. Needs the klayout BINARY (not the python module); locally it is provided via nix-portable
+# (see ~/bin/klayout, mirroring the magic wrapper). 0 real violations; the only hits are the
+# die-level density rules (PL.8/M1-5.4/MT.3) satisfied by dummy fill at chip integration.
 drc_klayout: $(TARGET_GDS)
 	mkdir -p drc
-	klayout -b -r $(DRC_DECK) -rd input=$(PWD)/$< -rd report=$(PWD)/drc/gf180_drc.lyrdb
+	klayout -b -zz -r $(DRC_DECK) -rd input=$(PWD)/$< -rd report=$(PWD)/drc/gf180_drc.lyrdb \
+		-rd feol=True -rd beol=True -rd conn_drc=True -rd wedge=True -rd run_mode=deep -rd thr=16 \
+		-rd topcell=$(MACRO)
 .PHONY: drc_klayout
 
 clean:

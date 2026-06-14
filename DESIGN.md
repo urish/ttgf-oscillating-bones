@@ -48,7 +48,17 @@ low output-enables keep the bidirectional pads in input/high-Z mode).
 
 ## What is validated ✅
 
-- **Magic DRC: 0 violations** (full macro).
+- **Full KLayout sign-off DRC: 0 real violations** (`make drc_klayout` — the authoritative
+  gf180mcuD `gf180mcu.drc` deck, FEOL + BEOL + connectivity + antenna, deep mode). The only hits
+  are the seven **die-level density** rules (PL.8 poly, M1–M5.4 / MT.3 metal coverage) that are
+  satisfied by dummy fill at chip integration, not by an individual macro — the taped-out reference
+  projects on this shuttle carry the identical seven. **Magic DRC also reports 0**, but note it is a
+  *weaker* check: it does not verify the 5 nm manufacturing grid, the exact contact/via sizes, or
+  metal slotting, so the KLayout deck is the gate that matters. Getting there required, beyond the
+  base remap: snapping all geometry to the 5 nm grid, rebuilding every cut at its exact gf180 size
+  (Contact 0.22 / Via 0.26), merging same-type implants (NP.2/PP.2) and clipping them off the
+  opposite diffusion (PP.3a), and slotting the skull's wide solid metal (MSLOT.1) — see
+  `remap_to_gf180.py` / `scripts/sanitize_gf180.py`.
 - **Post-layout SPICE oscillates and divides.** Extracting the hardened GDS with magic and
   simulating with the gf180mcuD ngspice models (`make sim`), the 21-stage ring oscillates
   **rail-to-rail at ~120 MHz**, and the 8-bit std-cell ripple divider produces clean **/2 .. /256**
