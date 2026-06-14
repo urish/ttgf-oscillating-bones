@@ -117,10 +117,20 @@ def regen_implants(comp_shapes, nwell_shapes, psd_shapes):
         grown = gdstk.offset(enc, IMPLANT_CLOSE, join="miter", use_union=True)
         return gdstk.offset(grown, -IMPLANT_CLOSE, join="miter", use_union=True)
 
+    # keep each implant >=0.16um from the opposite-type diffusion (PP.3a/NP.3a): clip the closed
+    # Pplus off the nfet NCOMP halo and the closed Nplus off the pfet PCOMP halo.
+    pplus = _enc_close(pcomp)
+    nplus = _enc_close(ncomp)
+    if pplus and nmos:
+        pplus = gdstk.boolean(pplus, gdstk.offset(nmos, 0.16, join="miter", use_union=True), "not")
+    pmos = gdstk.boolean(pcomp, nwell, "and") if (pcomp and nwell) else pcomp
+    if nplus and pmos:
+        nplus = gdstk.boolean(nplus, gdstk.offset(pmos, 0.16, join="miter", use_union=True), "not")
+
     out = []
-    for p in _enc_close(pcomp):
+    for p in pplus:
         out.append(gdstk.Polygon(p.points, layer=PPLUS[0], datatype=PPLUS[1]))
-    for p in _enc_close(ncomp):
+    for p in nplus:
         out.append(gdstk.Polygon(p.points, layer=NPLUS[0], datatype=NPLUS[1]))
     for p in gdstk.offset(nmos, 0.45, join="miter") if nmos else []:
         out.append(gdstk.Polygon(p.points, layer=LVPWELL[0], datatype=LVPWELL[1]))
